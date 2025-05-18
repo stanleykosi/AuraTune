@@ -1,26 +1,126 @@
-@import "tailwindcss";
+/**
+ * @description
+ * This file defines the global styles for the AuraTune application.
+ * It includes Tailwind CSS imports, CSS custom properties for the color palette,
+ * and base HTML element styling, adhering to the project's design specifications.
+ *
+ * Key features:
+ * - Tailwind CSS base, components, and utilities.
+ * - CSS custom properties for a themable color palette (light and dark modes).
+ * - Base styles for body, ensuring project fonts and background/text colors are applied.
+ * - Airbnb-inspired clean and modern aesthetic.
+ */
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+ @import "tailwindcss";
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+ :root {
+   /* Color Palette Definition */
+   /* Naming convention: --color-role-variant (e.g., --color-primary-default) */
+ 
+   /* Primary Colors */
+   --color-primary-default: 0 166 153; /* #00A699 Teal */
+   --color-accent-default: 255 90 95; /* #FF5A5F Coral */
+ 
+   /* Neutral Colors (Light Theme) */
+   --color-neutral-light-1: 255 255 255; /* #FFFFFF */
+   --color-neutral-light-2: 247 247 247; /* #F7F7F7 */
+   --color-text-light-primary: 72 72 72; /* #484848 */
+   --color-text-light-secondary: 118 118 118; /* #767676 - example, can be added if needed */
+ 
+   /* Neutral Colors (Dark Theme) - Values will be set in @media (prefers-color-scheme: dark) */
+   --color-neutral-dark-1: 18 18 18; /* #121212 */
+   --color-neutral-dark-2: 30 30 30; /* #1E1E1E */
+   --color-text-dark-primary: 224 224 224; /* #E0E0E0 */
+   --color-text-dark-secondary: 170 170 170; /* #AAAAAA - example, can be added if needed */
+ 
+   /* Spotify Green (used sparingly) */
+   --color-spotify-green: 29 185 84; /* #1DB954 */
+ 
+   /* Base background and foreground for light theme */
+   --background-rgb: var(--color-neutral-light-2); /* Default to F7F7F7 for body */
+   --foreground-rgb: var(--color-text-light-primary); /* Default to 484848 */
+ 
+   /* Shadcn UI variables (will be populated by shadcn init or manually if needed) */
+   --background: var(--color-neutral-light-1); /* #FFFFFF for card backgrounds etc. */
+   --foreground: var(--color-text-light-primary); /* #484848 */
+ 
+   --card: var(--color-neutral-light-1);
+   --card-foreground: var(--color-text-light-primary);
+ 
+   --popover: var(--color-neutral-light-1);
+   --popover-foreground: var(--color-text-light-primary);
+ 
+   --primary: var(--color-primary-default);
+   --primary-foreground: var(--color-neutral-light-1); /* Text on primary button */
+ 
+   --secondary: var(--color-neutral-light-2); /* Example secondary button bg */
+   --secondary-foreground: var(--color-text-light-primary); /* Example text on secondary button */
+ 
+   --muted: var(--color-neutral-light-2);
+   --muted-foreground: var(--color-text-light-secondary); /* Lighter text */
+ 
+   --accent: var(--color-accent-default);
+   --accent-foreground: var(--color-neutral-light-1); /* Text on accent button */
+ 
+   --destructive: 255 0 0; /* Example destructive color */
+   --destructive-foreground: var(--color-neutral-light-1);
+ 
+   --border: var(--color-neutral-dark-2); /* A light border, can be adjusted */
+   --input: var(--color-neutral-dark-2); /* Border for input */
+   --ring: var(--color-primary-default); /* Focus ring */
+ 
+   --radius: 0.5rem; /* Default border radius for Shadcn components */
+ }
+ 
+ @media (prefers-color-scheme: dark) {
+   :root {
+     --background-rgb: var(--color-neutral-dark-2); /* #1E1E1E for body */
+     --foreground-rgb: var(--color-text-dark-primary); /* #E0E0E0 */
+ 
+     /* Shadcn UI variables for dark mode */
+     --background: var(--color-neutral-dark-1); /* #121212 for card backgrounds etc. */
+     --foreground: var(--color-text-dark-primary);
+ 
+     --card: var(--color-neutral-dark-1);
+     --card-foreground: var(--color-text-dark-primary);
+ 
+     --popover: var(--color-neutral-dark-1);
+     --popover-foreground: var(--color-text-dark-primary);
+ 
+     /* Primary remains the same, but foreground might change if needed for contrast */
+     /* --primary: var(--color-primary-default); */
+     /* --primary-foreground: var(--color-neutral-light-1); */ /* Keeping light text on primary */
+ 
+     --secondary: var(--color-neutral-dark-2);
+     --secondary-foreground: var(--color-text-dark-primary);
+ 
+     --muted: var(--color-neutral-dark-2);
+     --muted-foreground: var(--color-text-dark-secondary);
+ 
+     /* Accent remains the same, foreground might change if needed for contrast */
+     /* --accent: var(--color-accent-default); */
+     /* --accent-foreground: var(--color-neutral-light-1); */ /* Keeping light text on accent */
+     
+     /* Destructive might need adjustment for dark mode, or keep as is */
+     /* --destructive: 255 0 0; */
+     /* --destructive-foreground: var(--color-neutral-light-1); */
+ 
+     --border: var(--color-neutral-light-2); /* A dark border, can be adjusted */
+     --input: var(--color-neutral-light-2);
+     /* --ring: var(--color-primary-default); */
+   }
+ }
+ 
+ body {
+   background-color: rgb(var(--background-rgb));
+   color: rgb(var(--foreground-rgb));
+   font-family: var(--font-geist-sans), sans-serif; /* Use Geist Sans from layout.tsx */
+   -webkit-font-smoothing: antialiased;
+   -moz-osx-font-smoothing: grayscale;
+ }
+ 
+ /* Basic accessibility focus outline, can be customized further */
+ *:focus-visible {
+   outline: 2px solid hsl(var(--ring));
+   outline-offset: 2px;
+ }
