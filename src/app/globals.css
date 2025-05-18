@@ -13,114 +13,198 @@
 
  @import "tailwindcss";
 
+ /*---break---
+ */
+
+ @custom-variant dark (&:is(.dark *));
+
  :root {
    /* Color Palette Definition */
    /* Naming convention: --color-role-variant (e.g., --color-primary-default) */
- 
+
    /* Primary Colors */
    --color-primary-default: 0 166 153; /* #00A699 Teal */
    --color-accent-default: 255 90 95; /* #FF5A5F Coral */
- 
+
    /* Neutral Colors (Light Theme) */
    --color-neutral-light-1: 255 255 255; /* #FFFFFF */
    --color-neutral-light-2: 247 247 247; /* #F7F7F7 */
    --color-text-light-primary: 72 72 72; /* #484848 */
    --color-text-light-secondary: 118 118 118; /* #767676 - example, can be added if needed */
- 
+
    /* Neutral Colors (Dark Theme) - Values will be set in @media (prefers-color-scheme: dark) */
    --color-neutral-dark-1: 18 18 18; /* #121212 */
    --color-neutral-dark-2: 30 30 30; /* #1E1E1E */
    --color-text-dark-primary: 224 224 224; /* #E0E0E0 */
    --color-text-dark-secondary: 170 170 170; /* #AAAAAA - example, can be added if needed */
- 
+
    /* Spotify Green (used sparingly) */
    --color-spotify-green: 29 185 84; /* #1DB954 */
- 
+
    /* Base background and foreground for light theme */
    --background-rgb: var(--color-neutral-light-2); /* Default to F7F7F7 for body */
    --foreground-rgb: var(--color-text-light-primary); /* Default to 484848 */
- 
-   /* Shadcn UI variables (will be populated by shadcn init or manually if needed) */
-   --background: var(--color-neutral-light-1); /* #FFFFFF for card backgrounds etc. */
-   --foreground: var(--color-text-light-primary); /* #484848 */
- 
-   --card: var(--color-neutral-light-1);
-   --card-foreground: var(--color-text-light-primary);
- 
-   --popover: var(--color-neutral-light-1);
-   --popover-foreground: var(--color-text-light-primary);
- 
-   --primary: var(--color-primary-default);
-   --primary-foreground: var(--color-neutral-light-1); /* Text on primary button */
- 
-   --secondary: var(--color-neutral-light-2); /* Example secondary button bg */
-   --secondary-foreground: var(--color-text-light-primary); /* Example text on secondary button */
- 
-   --muted: var(--color-neutral-light-2);
-   --muted-foreground: var(--color-text-light-secondary); /* Lighter text */
- 
-   --accent: var(--color-accent-default);
-   --accent-foreground: var(--color-neutral-light-1); /* Text on accent button */
- 
-   --destructive: 255 0 0; /* Example destructive color */
+
+   /* Shadcn UI variables (will be populated by shadcn init or manually if needed) */ /* #FFFFFF for card backgrounds etc. */ /* #484848 */
+
+   --card: oklch(1 0 0);
+   --card-foreground: oklch(0.129 0.042 264.695);
+
+   --popover: oklch(1 0 0);
+   --popover-foreground: oklch(0.129 0.042 264.695);
+
+   --primary: oklch(0.208 0.042 265.755);
+   --primary-foreground: oklch(0.984 0.003 247.858); /* Text on primary button */
+
+   --secondary: oklch(0.968 0.007 247.896); /* Example secondary button bg */
+   --secondary-foreground: oklch(0.208 0.042 265.755); /* Example text on secondary button */
+
+   --muted: oklch(0.968 0.007 247.896);
+   --muted-foreground: oklch(0.554 0.046 257.417); /* Lighter text */
+
+   --accent: oklch(0.968 0.007 247.896);
+   --accent-foreground: oklch(0.208 0.042 265.755); /* Text on accent button */
+
+   --destructive: oklch(0.577 0.245 27.325); /* Example destructive color */
    --destructive-foreground: var(--color-neutral-light-1);
- 
-   --border: var(--color-neutral-dark-2); /* A light border, can be adjusted */
-   --input: var(--color-neutral-dark-2); /* Border for input */
-   --ring: var(--color-primary-default); /* Focus ring */
- 
-   --radius: 0.5rem; /* Default border radius for Shadcn components */
+
+   --border: oklch(0.929 0.013 255.508); /* A light border, can be adjusted */
+   --input: oklch(0.929 0.013 255.508); /* Border for input */
+   --ring: oklch(0.704 0.04 256.788); /* Focus ring */
+
+   --radius: 0.625rem; /* Default border radius for Shadcn components */ --background: oklch(1 0 0); --foreground: oklch(0.129 0.042 264.695); --chart-1: oklch(0.646 0.222 41.116); --chart-2: oklch(0.6 0.118 184.704); --chart-3: oklch(0.398 0.07 227.392); --chart-4: oklch(0.828 0.189 84.429); --chart-5: oklch(0.769 0.188 70.08); --sidebar: oklch(0.984 0.003 247.858); --sidebar-foreground: oklch(0.129 0.042 264.695); --sidebar-primary: oklch(0.208 0.042 265.755); --sidebar-primary-foreground: oklch(0.984 0.003 247.858); --sidebar-accent: oklch(0.968 0.007 247.896); --sidebar-accent-foreground: oklch(0.208 0.042 265.755); --sidebar-border: oklch(0.929 0.013 255.508); --sidebar-ring: oklch(0.704 0.04 256.788);
  }
- 
+
  @media (prefers-color-scheme: dark) {
    :root {
      --background-rgb: var(--color-neutral-dark-2); /* #1E1E1E for body */
      --foreground-rgb: var(--color-text-dark-primary); /* #E0E0E0 */
- 
-     /* Shadcn UI variables for dark mode */
-     --background: var(--color-neutral-dark-1); /* #121212 for card backgrounds etc. */
-     --foreground: var(--color-text-dark-primary);
- 
+
+     /* Shadcn UI variables for dark mode */ /* #121212 for card backgrounds etc. */
+
      --card: var(--color-neutral-dark-1);
      --card-foreground: var(--color-text-dark-primary);
- 
+
      --popover: var(--color-neutral-dark-1);
      --popover-foreground: var(--color-text-dark-primary);
- 
+
      /* Primary remains the same, but foreground might change if needed for contrast */
      /* --primary: var(--color-primary-default); */
      /* --primary-foreground: var(--color-neutral-light-1); */ /* Keeping light text on primary */
- 
+
      --secondary: var(--color-neutral-dark-2);
      --secondary-foreground: var(--color-text-dark-primary);
- 
+
      --muted: var(--color-neutral-dark-2);
      --muted-foreground: var(--color-text-dark-secondary);
- 
+
      /* Accent remains the same, foreground might change if needed for contrast */
      /* --accent: var(--color-accent-default); */
      /* --accent-foreground: var(--color-neutral-light-1); */ /* Keeping light text on accent */
-     
+
      /* Destructive might need adjustment for dark mode, or keep as is */
      /* --destructive: 255 0 0; */
      /* --destructive-foreground: var(--color-neutral-light-1); */
- 
+
      --border: var(--color-neutral-light-2); /* A dark border, can be adjusted */
      --input: var(--color-neutral-light-2);
      /* --ring: var(--color-primary-default); */
    }
  }
- 
+
  body {
    background-color: rgb(var(--background-rgb));
-   color: rgb(var(--foreground-rgb));
    font-family: var(--font-geist-sans), sans-serif; /* Use Geist Sans from layout.tsx */
    -webkit-font-smoothing: antialiased;
    -moz-osx-font-smoothing: grayscale;
  }
- 
+
  /* Basic accessibility focus outline, can be customized further */
  *:focus-visible {
    outline: 2px solid hsl(var(--ring));
    outline-offset: 2px;
  }
+ /*---break---
+ */
+ @theme inline {
+   --radius-sm: calc(var(--radius) - 4px);
+   --radius-md: calc(var(--radius) - 2px);
+   --radius-lg: var(--radius);
+   --radius-xl: calc(var(--radius) + 4px);
+   --color-background: var(--background);
+   --color-foreground: var(--foreground);
+   --color-card: var(--card);
+   --color-card-foreground: var(--card-foreground);
+   --color-popover: var(--popover);
+   --color-popover-foreground: var(--popover-foreground);
+   --color-primary: var(--primary);
+   --color-primary-foreground: var(--primary-foreground);
+   --color-secondary: var(--secondary);
+   --color-secondary-foreground: var(--secondary-foreground);
+   --color-muted: var(--muted);
+   --color-muted-foreground: var(--muted-foreground);
+   --color-accent: var(--accent);
+   --color-accent-foreground: var(--accent-foreground);
+   --color-destructive: var(--destructive);
+   --color-border: var(--border);
+   --color-input: var(--input);
+   --color-ring: var(--ring);
+   --color-chart-1: var(--chart-1);
+   --color-chart-2: var(--chart-2);
+   --color-chart-3: var(--chart-3);
+   --color-chart-4: var(--chart-4);
+   --color-chart-5: var(--chart-5);
+   --color-sidebar: var(--sidebar);
+   --color-sidebar-foreground: var(--sidebar-foreground);
+   --color-sidebar-primary: var(--sidebar-primary);
+   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+   --color-sidebar-accent: var(--sidebar-accent);
+   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+   --color-sidebar-border: var(--sidebar-border);
+   --color-sidebar-ring: var(--sidebar-ring);
+}
+ /*---break---
+ */
+ .dark {
+   --background: oklch(0.129 0.042 264.695);
+   --foreground: oklch(0.984 0.003 247.858);
+   --card: oklch(0.208 0.042 265.755);
+   --card-foreground: oklch(0.984 0.003 247.858);
+   --popover: oklch(0.208 0.042 265.755);
+   --popover-foreground: oklch(0.984 0.003 247.858);
+   --primary: oklch(0.929 0.013 255.508);
+   --primary-foreground: oklch(0.208 0.042 265.755);
+   --secondary: oklch(0.279 0.041 260.031);
+   --secondary-foreground: oklch(0.984 0.003 247.858);
+   --muted: oklch(0.279 0.041 260.031);
+   --muted-foreground: oklch(0.704 0.04 256.788);
+   --accent: oklch(0.279 0.041 260.031);
+   --accent-foreground: oklch(0.984 0.003 247.858);
+   --destructive: oklch(0.704 0.191 22.216);
+   --border: oklch(1 0 0 / 10%);
+   --input: oklch(1 0 0 / 15%);
+   --ring: oklch(0.551 0.027 264.364);
+   --chart-1: oklch(0.488 0.243 264.376);
+   --chart-2: oklch(0.696 0.17 162.48);
+   --chart-3: oklch(0.769 0.188 70.08);
+   --chart-4: oklch(0.627 0.265 303.9);
+   --chart-5: oklch(0.645 0.246 16.439);
+   --sidebar: oklch(0.208 0.042 265.755);
+   --sidebar-foreground: oklch(0.984 0.003 247.858);
+   --sidebar-primary: oklch(0.488 0.243 264.376);
+   --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+   --sidebar-accent: oklch(0.279 0.041 260.031);
+   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+   --sidebar-border: oklch(1 0 0 / 10%);
+   --sidebar-ring: oklch(0.551 0.027 264.364);
+}
+ /*---break---
+ */
+ @layer base {
+  * {
+    @apply border-border outline-ring/50;
+   }
+  body {
+    @apply bg-background text-foreground;
+   }
+}
