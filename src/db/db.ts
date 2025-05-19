@@ -45,5 +45,6 @@ const sql = neon(process.env.DATABASE_URL)
  * It is configured with the Neon SQL instance and the imported schemas.
  * This allows for type-safe database operations using Drizzle.
  * For example: db.query.users.findMany() or db.insert(usersTable).values(...)
+ * The `allSchemas` object now includes usersTable, userSettingsTable, playlistsTable, and curatedTemplatesTable.
  */
 export const db = drizzle(sql, { schema: allSchemas })
