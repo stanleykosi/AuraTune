@@ -21,6 +21,6 @@
 
 export * from "./users-schema"
 export * from "./user-settings-schema"
+export * from "./playlists-schema"
 // Add exports here as new schema files are created, e.g.:
-// export * from "./playlists-schema";
 // export * from "./curated-templates-schema";
