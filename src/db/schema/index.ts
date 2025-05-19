@@ -17,11 +17,10 @@
  *
  * @notes
  * - This file will be populated as new table schemas are created.
- * - It is initially empty as no schemas have been defined yet.
  */
 
-// This file will export all table schemas.
-// For example:
-// export * from "./users-schema";
+export * from "./users-schema"
+// Add exports here as new schema files are created, e.g.:
+// export * from "./user-settings-schema";
 // export * from "./playlists-schema";
-// Add exports here as new schema files are created.
+// export * from "./curated-templates-schema";
