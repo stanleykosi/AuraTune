@@ -3,11 +3,14 @@
  * This file extends the default NextAuth.js types to include custom properties
  * specific to the AuraTune application's authentication flow with Spotify.
  * It augments the `Session` and `JWT` interfaces to provide type safety for
- * Spotify-specific tokens, user identifiers, and potential error states.
+ * Spotify-specific tokens, user identifiers (both Spotify ID and AuraTune internal UUID),
+ * and potential error states.
  *
  * Key Augmentations:
- * - `JWT`: Adds `accessToken`, `refreshToken`, `accessTokenExpires`, `spotifyUserId`, and `error`.
- * - `Session`: Adds `accessToken`, `spotifyUserId`, and `error`. Also refines `Session["user"]` to include `id`.
+ * - `JWT`: Adds `accessToken`, `refreshToken`, `accessTokenExpires`, `spotifyUserId`,
+ *   `auratuneInternalId` (AuraTune's database UUID for the user), and `error`.
+ * - `Session`: Adds `accessToken`, `error`. Refines `Session["user"]` to include
+ *   `id` (as Spotify User ID) and `auratuneInternalId`.
  *
  * @dependencies
  * - `next-auth`: Base types being augmented.
@@ -16,18 +19,19 @@
  * @notes
  * - These augmentations allow for strongly-typed access to custom session and token data
  *   within NextAuth.js callbacks and client-side hooks like `useSession`.
- * - `spotifyUserId` will store the user's unique ID from Spotify.
+ * - `spotifyUserId` stores the user's unique ID from Spotify.
+ * - `auratuneInternalId` stores AuraTune's internal UUID for the user record in its database.
  * - `accessTokenExpires` is a timestamp (in milliseconds) indicating when the Spotify access token expires.
  * - The `error` field can be used to communicate token refresh failures to the client.
  */
 
-import { DefaultSession, DefaultUser } from "next-auth"
+import { DefaultSession, DefaultUser, AdapterUser } from "next-auth"
 import { JWT as NextAuthJWT } from "next-auth/jwt"
 
 declare module "next-auth/jwt" {
   /**
    * Extends the default JWT interface from NextAuth.js.
-   * This interface includes Spotify-specific token information and user ID.
+   * This interface includes Spotify-specific token information and user IDs.
    */
   interface JWT extends NextAuthJWT {
     /**
@@ -47,21 +51,25 @@ declare module "next-auth/jwt" {
      */
     spotifyUserId?: string
     /**
+     * AuraTune's internal UUID for the user record in its database.
+     */
+    auratuneInternalId?: string
+    /**
      * An error string, typically set if token refresh fails.
      * Common value: "RefreshAccessTokenError".
      */
     error?: string
-    // We can also ensure standard user properties are available if needed
-    // name?: string | null;
-    // email?: string | null;
-    // picture?: string | null;
+    // Standard user properties can also be present on the token
+    name?: string | null
+    email?: string | null
+    picture?: string | null
   }
 }
 
 declare module "next-auth" {
   /**
    * Extends the default Session interface from NextAuth.js.
-   * This interface makes the Spotify access token, user ID, and potential error
+   * This interface makes the Spotify access token, user IDs, and potential error
    * available on the client-side session object.
    */
   interface Session {
@@ -69,11 +77,6 @@ declare module "next-auth" {
      * The Spotify access token.
      */
     accessToken?: string
-    /**
-     * The user's unique Spotify ID.
-     * This is exposed on the session object directly for easier access.
-     */
-    spotifyUserId?: string
     /**
      * An error string, propagated from the JWT if token refresh fails.
      */
@@ -83,19 +86,26 @@ declare module "next-auth" {
      */
     user?: {
       /**
-       * The user's unique Spotify ID, mapped to `id` for consistency
-       * with how NextAuth typically structures the user object.
+       * The user's unique Spotify ID.
+       * Mapped to `id` for consistency with NextAuth's typical user object structure.
        */
       id?: string | null
+      /**
+       * AuraTune's internal UUID for the user record in its database.
+       */
+      auratuneInternalId?: string | null
     } & DefaultSession["user"] // Includes name, email, image from DefaultSession
   }
 
   /**
    * Extends the default User interface from NextAuth.js.
-   * Ensures `id` is part of the User object, which will store the Spotify User ID.
+   * `id` is typically the provider's user ID.
+   * We also add `auratuneInternalId` to the user object that is passed
+   * from the `signIn` callback to the `jwt` callback.
    */
   interface User extends DefaultUser {
-    id: string // Spotify User ID
+    id: string // Spotify User ID from provider
+    auratuneInternalId?: string // AuraTune's internal DB UUID, attached in signIn
   }
 
   /**
@@ -114,5 +124,14 @@ declare module "next-auth" {
     id?: string // Spotify User ID
     // Other Spotify profile fields like display_name, email, images can be added if needed
     // for direct access during signIn callback, although NextAuth usually maps them.
+  }
+}
+
+// For the `user` parameter in `signIn` and `jwt` callbacks, which can be `User | AdapterUser`.
+// If `AdapterUser` properties are needed, they can be augmented here or handled with type assertions.
+// For now, `User` is primarily extended.
+declare module "next-auth/adapters" {
+  interface AdapterUser extends User {
+    auratuneInternalId?: string;
   }
 }
