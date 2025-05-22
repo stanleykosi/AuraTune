@@ -90,41 +90,63 @@ export async function createDefaultUserSettingsAction(
 }
 
 /**
- * Retrieves user settings for a given user ID.
- * This is a STUB and will be fully implemented in a later step (Step 4.1).
+ * Retrieves user settings for a given AuraTune internal user ID.
  *
- * @param userId - The AuraTune internal UUID of the user.
- * @returns A Promise resolving to an `ActionState`. Currently returns "Not yet implemented."
+ * @param userId - The AuraTune internal UUID of the user (from the `users` table).
+ * @returns A Promise resolving to an `ActionState`.
+ *          On success, if settings are found, `data` contains the `SelectUserSettings` object.
+ *          If settings are not found, `data` is `null`.
+ *          On failure, `isSuccess` is false and `message` contains error details.
  */
 export async function getUserSettingsAction(
   userId: string
 ): Promise<ActionState<SelectUserSettings | null>> {
-  console.warn(
-    "getUserSettingsAction in src/actions/db/user-settings-actions.ts is a stub and not fully implemented. It will be completed in Step 4.1."
-  )
-  // To be implemented in Step 4.1 as per the implementation plan.
-  // For now, returning a placeholder error state.
   try {
-     if (!userId) {
-      return { isSuccess: false, message: "User ID is required." }
+    if (!userId) {
+      return {
+        isSuccess: false,
+        message: "User ID is required to retrieve user settings.",
+      }
     }
-    // Placeholder for actual DB query
-    // const settings = await db.query.userSettingsTable.findFirst({ where: eq(userSettingsTable.userId, userId) });
-    return { isSuccess: false, message: "getUserSettingsAction: Not yet implemented." }
+
+    const settings = await db.query.userSettingsTable.findFirst({
+      where: eq(userSettingsTable.userId, userId),
+    })
+
+    if (!settings) {
+      return {
+        isSuccess: true, // It's a successful query, just no settings found
+        message: "No user settings found for the given user ID.",
+        data: null,
+      }
+    }
+
+    return {
+      isSuccess: true,
+      message: "User settings retrieved successfully.",
+      data: settings,
+    }
   } catch (error) {
-     console.error("Error in getUserSettingsAction (stub):", error);
-     return { isSuccess: false, message: "Failed to get user settings (stub)." };
+    console.error("Error in getUserSettingsAction:", error)
+    return {
+      isSuccess: false,
+      message: "An unexpected error occurred while retrieving user settings.",
+    }
   }
 }
 
 /**
- * Updates user settings for a given user ID.
- * This is a STUB and will be fully implemented in a later step (Step 4.1).
+ * Updates user settings for a given AuraTune internal user ID.
+ * Only fields provided in the `data` object will be updated.
+ * The `updatedAt` timestamp is automatically handled by Drizzle's `$onUpdate` mechanism.
  *
- * @param userId - The AuraTune internal UUID of the user.
- * @param data - Partial data for user settings to update.
- *               Should not include `id`, `userId`, `createdAt`, or `updatedAt`.
- * @returns A Promise resolving to an `ActionState`. Currently returns "Not yet implemented."
+ * @param userId - The AuraTune internal UUID of the user (from the `users` table).
+ * @param data - An object containing the fields to update.
+ *               Should only include fields like `default_playlist_track_count`.
+ *               Do not pass `id`, `userId`, `createdAt`, or `updatedAt`.
+ * @returns A Promise resolving to an `ActionState`.
+ *          On success, `data` contains the updated `SelectUserSettings` object.
+ *          On failure (e.g., user not found, database error), `isSuccess` is false.
  */
 export async function updateUserSettingsAction(
   userId: string,
@@ -132,23 +154,48 @@ export async function updateUserSettingsAction(
     Omit<InsertUserSettings, "id" | "userId" | "createdAt" | "updatedAt">
   >
 ): Promise<ActionState<SelectUserSettings>> {
-  console.warn(
-    "updateUserSettingsAction in src/actions/db/user-settings-actions.ts is a stub and not fully implemented. It will be completed in Step 4.1."
-  )
-  // To be implemented in Step 4.1 as per the implementation plan.
-  // For now, returning a placeholder error state.
-   try {
+  try {
     if (!userId) {
-      return { isSuccess: false, message: "User ID is required." };
+      return {
+        isSuccess: false,
+        message: "User ID is required to update user settings.",
+      }
     }
+
     if (!data || Object.keys(data).length === 0) {
-       return { isSuccess: false, message: "No data provided for update." };
+      return {
+        isSuccess: false,
+        message: "No data provided for update. At least one field to update is required.",
+      }
     }
-    // Placeholder for actual DB update
-    // const [updatedSettings] = await db.update(userSettingsTable).set({...data, updatedAt: new Date()}).where(eq(userSettingsTable.userId, userId)).returning();
-    return { isSuccess: false, message: "updateUserSettingsAction: Not yet implemented." };
+
+    // Perform the update operation.
+    // `updatedAt` will be handled automatically by Drizzle's `$onUpdate` from the schema.
+    const [updatedSettings] = await db
+      .update(userSettingsTable)
+      .set(data)
+      .where(eq(userSettingsTable.userId, userId))
+      .returning() // Return all columns of the updated row.
+
+    if (!updatedSettings) {
+      // This could happen if the userId does not exist, so no rows were updated.
+      return {
+        isSuccess: false,
+        message:
+          "Failed to update user settings: User not found or no changes made.",
+      }
+    }
+
+    return {
+      isSuccess: true,
+      message: "User settings updated successfully.",
+      data: updatedSettings,
+    }
   } catch (error) {
-    console.error("Error in updateUserSettingsAction (stub):", error);
-    return { isSuccess: false, message: "Failed to update user settings (stub)." };
+    console.error("Error in updateUserSettingsAction:", error)
+    return {
+      isSuccess: false,
+      message: "An unexpected error occurred while updating user settings.",
+    }
   }
 }
