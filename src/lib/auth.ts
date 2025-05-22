@@ -38,8 +38,8 @@ import NextAuth, { NextAuthOptions, Account, Profile, User } from "next-auth"
 import { AdapterUser } from "next-auth/adapters"
 import { JWT } from "next-auth/jwt"
 import SpotifyProvider, { SpotifyProfile } from "next-auth/providers/spotify"
-import { upsertUserAction } from "@/db/users-actions"
-import { createDefaultUserSettingsAction } from "@/db/user-settings-actions"
+import { upsertUserAction } from "@/actions/db/users-actions"
+import { createDefaultUserSettingsAction } from "@/actions/db/user-settings-actions"
 import { SelectUser } from "@/db/schema/users-schema"
 
 // Ensure environment variables are set
