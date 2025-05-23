@@ -29,21 +29,23 @@ import {
 
 export default async function SettingsPageSkeleton(): Promise<JSX.Element> {
   return (
-    <Card>
-      <CardHeader>
-        <Skeleton className="h-6 w-1/2" /> {/* Placeholder for CardTitle */}
-        <Skeleton className="h-4 w-3/4 mt-1" /> {/* Placeholder for CardDescription */}
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-1/4" /> {/* Placeholder for Label */}
-          <Skeleton className="h-10 w-full" /> {/* Placeholder for Input */}
-          <Skeleton className="h-3 w-2/3 mt-1" /> {/* Placeholder for help text */}
-        </div>
-      </CardContent>
-      <CardFooter>
-        <Skeleton className="h-10 w-24" /> {/* Placeholder for Save Button */}
-      </CardFooter>
-    </Card>
+    <div data-testid="settings-skeleton">
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-1/2" /> {/* Placeholder for CardTitle */}
+          <Skeleton className="h-4 w-3/4 mt-1" /> {/* Placeholder for CardDescription */}
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-1/4" /> {/* Placeholder for Label */}
+            <Skeleton className="h-10 w-full" /> {/* Placeholder for Input */}
+            <Skeleton className="h-3 w-2/3 mt-1" /> {/* Placeholder for help text */}
+          </div>
+        </CardContent>
+        <CardFooter>
+          <Skeleton className="h-10 w-24" /> {/* Placeholder for Save Button */}
+        </CardFooter>
+      </Card>
+    </div>
   )
 }
