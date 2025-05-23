@@ -20,3 +20,5 @@
 
 export * from "./actions-types"
 export * from "./app-types"
+export * from "./llm-types" // Added export for LLM specific types
+export * from "./next-auth.d" // Ensure next-auth types are also exported if not already
