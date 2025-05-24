@@ -3,11 +3,13 @@
  * Server actions orchestrating the AI-powered playlist generation process.
  * These actions combine calls to database services (for templates, user settings),
  * LLM services (for track suggestions, name/description generation), and
- * Spotify services (for track validation, playlist creation - future steps).
+ * Spotify services (for track validation, playlist creation).
  *
  * Key actions:
  * - `generateAndPreviewPlaylistFromTemplateAction`: Orchestrates generating a playlist
  *   preview based on a selected curated template.
+ * - `saveGeneratedPlaylistToSpotifyAction`: Saves a generated and previewed playlist
+ *   to the user's Spotify account and records it in the AuraTune database.
  *
  * @dependencies
  * - `next-auth/next`: For `getServerSession` to retrieve user session data.
@@ -15,8 +17,10 @@
  * - `@/types`: For `ActionState` and `PlaylistPreviewData` types.
  * - `@/actions/db/curated-templates-actions`: To fetch curated template details.
  * - `@/actions/db/user-settings-actions`: To fetch user's default settings.
+ * - `@/actions/db/playlists-actions`: To save playlist metadata to AuraTune's database.
  * - `@/actions/llm/openrouter-actions`: To interact with LLMs for generation tasks.
- * - `@/actions/spotify/spotify-playlist-actions`: To validate tracks against Spotify.
+ * - `@/actions/spotify/spotify-playlist-actions`: To validate tracks against Spotify and manage Spotify playlists.
+ * - `@/db/schema/playlists-schema`: For `playlistGenerationMethodEnum` type.
  *
  * @notes
  * - These are high-level orchestrating actions.
@@ -29,14 +33,21 @@ import { authOptions } from "@/lib/auth"
 import { ActionState, PlaylistPreviewData } from "@/types"
 import { getCuratedTemplateByIdAction } from "@/actions/db/curated-templates-actions"
 import { getUserSettingsAction } from "@/actions/db/user-settings-actions"
+import { createPlaylistRecordAction } from "@/actions/db/playlists-actions"
 import {
   generateTracksForPlaylistViaOpenRouterAction,
   generatePlaylistNameAndDescriptionViaOpenRouterAction,
 } from "@/actions/llm/openrouter-actions"
-import { validateSpotifyTracksAction } from "@/actions/spotify/spotify-playlist-actions"
+import {
+  validateSpotifyTracksAction,
+  createSpotifyPlaylistAction,
+  addTracksToSpotifyPlaylistAction,
+} from "@/actions/spotify/spotify-playlist-actions"
 import type SpotifyWebApi from "spotify-web-api-node"
+import { playlistGenerationMethodEnum } from "@/db/schema/playlists-schema"
 
 const MINIMUM_VALID_TRACKS = 5 // Minimum number of valid tracks required after validation
+const SPOTIFY_TRACK_ADD_LIMIT = 100 // Spotify API limit for adding tracks in one request
 
 /**
  * Orchestrates the generation of a playlist preview based on a selected curated template.
@@ -63,7 +74,7 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
   try {
     // 1. Validate session and inputs
     const session = await getServerSession(authOptions)
-    if (!session?.user?.auratuneInternalId || !session?.accessToken) {
+    if (!session?.user?.auratuneInternalId || !session?.accessToken || !session?.user?.id) {
       return {
         isSuccess: false,
         message:
@@ -71,7 +82,7 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
       }
     }
     const userId = session.user.auratuneInternalId
-    const userSpotifyAccessToken = session.accessToken;
+    const userSpotifyAccessToken = session.accessToken
 
     if (!templateId) {
       return { isSuccess: false, message: "Template ID is required." }
@@ -120,7 +131,7 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
           "Failed to generate track suggestions from LLM.",
       }
     }
-    const llmSuggestedTracks = trackSuggestionsResult.data // Type: OpenRouterTrackSuggestion[]
+    const llmSuggestedTracks = trackSuggestionsResult.data
 
     // 5. Validate track suggestions against Spotify
     const validationResult = await validateSpotifyTracksAction(userSpotifyAccessToken, llmSuggestedTracks)
@@ -141,10 +152,6 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
       } else {
         message += " Please try regenerating or choose a different template."
       }
-      // This is a user-facing "soft" error; they might still want to proceed with fewer tracks or regenerate.
-      // For now, let's treat it as a failure to meet expectations if it's below minimum.
-      // Consider how to inform user: if we proceed, the playlist will be short.
-      // For a stricter approach, make it a hard failure:
       return {
         isSuccess: false,
         message: message,
@@ -152,9 +159,7 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
     }
     if (validatedTracks.length < trackCount) {
       console.warn(`AuraTune: Requested ${trackCount} tracks, but only ${validatedTracks.length} were validated on Spotify.`);
-      // Optionally, notify user subtly in the preview if count is less than requested but above minimum.
     }
-
 
     // 7. Calculate total estimated duration of validated tracks
     const estimatedDurationMs = validatedTracks.reduce(
@@ -165,8 +170,8 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
     // 8. Call LLM to generate playlist name and description using validated tracks
     const playlistMetadataResult =
       await generatePlaylistNameAndDescriptionViaOpenRouterAction(
-        validatedTracks, // Pass validated Spotify tracks
-        curatedTemplate.description // Use template description as theme context
+        validatedTracks,
+        curatedTemplate.description
       )
 
     if (
@@ -209,4 +214,139 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
   }
 }
 
-// Future orchestrating actions (e.g., for track match) will go here.
+/**
+ * Defines the payload structure for saving a generated playlist.
+ */
+export interface PlaylistSavePayload {
+  editedName: string;
+  editedDescription: string;
+  tracks: SpotifyApi.TrackObjectFull[]; // Full track objects from preview
+  generationMethod: typeof playlistGenerationMethodEnum.enumValues[number]; // e.g., "curated_template"
+  generationParams: object; // e.g., { templateId: "some-uuid" }
+}
+
+/**
+ * Saves a generated playlist to the user's Spotify account and records it in AuraTune's database.
+ *
+ * @param payload - The data required to save the playlist.
+ * @returns A Promise resolving to an `ActionState`.
+ *          On success, `data` contains the `spotifyPlaylistId` and `spotifyPlaylistUrl`.
+ *          On failure, `isSuccess` is false, and `message` describes the error.
+ */
+export async function saveGeneratedPlaylistToSpotifyAction(
+  payload: PlaylistSavePayload
+): Promise<ActionState<{ spotifyPlaylistId: string; spotifyPlaylistUrl: string }>> {
+  try {
+    // 1. Validate session and retrieve necessary user identifiers and tokens
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.auratuneInternalId || !session?.user?.id || !session?.accessToken) {
+      return {
+        isSuccess: false,
+        message: "User session not found or incomplete. Please log in again.",
+      }
+    }
+    const auratuneUserId = session.user.auratuneInternalId // AuraTune's internal DB user ID
+    const spotifyUserId = session.user.id                   // Spotify's user ID
+    const userSpotifyAccessToken = session.accessToken
+
+    const {
+      editedName,
+      editedDescription,
+      tracks,
+      generationMethod,
+      generationParams,
+    } = payload
+
+    // Validate payload basics
+    if (!editedName || editedName.trim() === "") {
+      return { isSuccess: false, message: "Playlist name cannot be empty." }
+    }
+    if (!tracks || tracks.length === 0) {
+      return { isSuccess: false, message: "Cannot save an empty playlist." }
+    }
+
+    // 2. Create the playlist on Spotify
+    const createSpotifyPlaylistResult = await createSpotifyPlaylistAction(
+      userSpotifyAccessToken,
+      spotifyUserId,
+      editedName,
+      editedDescription || "", // Ensure description is at least an empty string if null/undefined
+      false // Default to private playlist
+    )
+
+    if (!createSpotifyPlaylistResult.isSuccess || !createSpotifyPlaylistResult.data) {
+      return {
+        isSuccess: false,
+        message: createSpotifyPlaylistResult.message || "Failed to create playlist on Spotify.",
+      }
+    }
+    const spotifyPlaylist = createSpotifyPlaylistResult.data
+    const spotifyPlaylistId = spotifyPlaylist.id
+    const spotifyPlaylistUrl = spotifyPlaylist.external_urls?.spotify || `https://open.spotify.com/playlist/${spotifyPlaylistId}`
+
+
+    // 3. Add tracks to the Spotify playlist (handle chunking)
+    const trackUris = tracks.map(track => track.uri).filter(uri => uri) // Filter out any undefined URIs
+    if (trackUris.length > 0) {
+      for (let i = 0; i < trackUris.length; i += SPOTIFY_TRACK_ADD_LIMIT) {
+        const chunk = trackUris.slice(i, i + SPOTIFY_TRACK_ADD_LIMIT)
+        const addTracksResult = await addTracksToSpotifyPlaylistAction(
+          userSpotifyAccessToken,
+          spotifyPlaylistId,
+          chunk
+        )
+        if (!addTracksResult.isSuccess) {
+          // Note: If adding tracks fails, the playlist is already created on Spotify.
+          // Consider cleanup or more sophisticated error handling/retry here.
+          // For now, report the failure.
+          console.error(`Failed to add a chunk of tracks to Spotify playlist ${spotifyPlaylistId}: ${addTracksResult.message}`)
+          return {
+            isSuccess: false,
+            message: `Playlist created, but failed to add tracks: ${addTracksResult.message}`,
+          }
+        }
+      }
+    }
+
+    // 4. Save playlist metadata to AuraTune's database
+    const totalTracks = tracks.length
+    const estimatedDurationMs = tracks.reduce((total, track) => total + (track.duration_ms || 0), 0)
+
+    const playlistRecordResult = await createPlaylistRecordAction({
+      userId: auratuneUserId,
+      spotify_playlist_id: spotifyPlaylistId,
+      name: editedName,
+      description: editedDescription || null, // Store null if empty
+      generation_method: generationMethod,
+      generation_params: generationParams,
+      track_count: totalTracks,
+      duration_ms: estimatedDurationMs,
+      // id, created_at_auratune, updatedAt are handled by Drizzle/DB defaults
+    })
+
+    if (!playlistRecordResult.isSuccess) {
+      // Playlist is on Spotify, but failed to save to our DB. Critical inconsistency.
+      // Log this error thoroughly for manual reconciliation.
+      console.error(
+        `CRITICAL: Playlist ${spotifyPlaylistId} created on Spotify but failed to save to AuraTune DB. User: ${auratuneUserId}. Error: ${playlistRecordResult.message}`
+      )
+      return {
+        isSuccess: false,
+        message: `Playlist saved to Spotify, but a server error occurred while recording it in AuraTune. Please note the playlist ID: ${spotifyPlaylistId}. Error: ${playlistRecordResult.message}`,
+      }
+    }
+
+    return {
+      isSuccess: true,
+      message: `Playlist "${editedName}" saved successfully to Spotify and AuraTune!`,
+      data: { spotifyPlaylistId, spotifyPlaylistUrl },
+    }
+
+  } catch (error) {
+    console.error("Unexpected error in saveGeneratedPlaylistToSpotifyAction:", error)
+    return {
+      isSuccess: false,
+      message: "An unexpected server error occurred while saving the playlist.",
+    }
+  }
+}
