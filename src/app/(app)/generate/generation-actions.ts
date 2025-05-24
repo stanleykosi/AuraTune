@@ -16,12 +16,11 @@
  * - `@/actions/db/curated-templates-actions`: To fetch curated template details.
  * - `@/actions/db/user-settings-actions`: To fetch user's default settings.
  * - `@/actions/llm/openrouter-actions`: To interact with LLMs for generation tasks.
+ * - `@/actions/spotify/spotify-playlist-actions`: To validate tracks against Spotify.
  *
  * @notes
  * - These are high-level orchestrating actions.
  * - Error handling is crucial at each step of the orchestration.
- * - Initial implementations rely on stubbed LLM actions and will be enhanced
- *   as dependent features (like track validation) are built.
  */
 "use server"
 
@@ -34,6 +33,10 @@ import {
   generateTracksForPlaylistViaOpenRouterAction,
   generatePlaylistNameAndDescriptionViaOpenRouterAction,
 } from "@/actions/llm/openrouter-actions"
+import { validateSpotifyTracksAction } from "@/actions/spotify/spotify-playlist-actions"
+import type SpotifyWebApi from "spotify-web-api-node"
+
+const MINIMUM_VALID_TRACKS = 5 // Minimum number of valid tracks required after validation
 
 /**
  * Orchestrates the generation of a playlist preview based on a selected curated template.
@@ -42,10 +45,12 @@ import {
  * 1. Validates session and inputs.
  * 2. Retrieves the specified curated template (including its system prompt).
  * 3. Fetches the user's default playlist track count from their settings.
- * 4. Calls an LLM action to generate track suggestions based on the template's prompt and track count.
- * 5. (Placeholder for Spotify track validation - to be implemented in a future step).
- * 6. Calls an LLM action to generate a playlist name and description based on the tracks and theme.
- * 7. Returns a `PlaylistPreviewData` object containing all necessary information for the client to display a preview.
+ * 4. Calls an LLM action to generate track suggestions (name/artist pairs).
+ * 5. Validates these suggestions against Spotify to get full track objects and filter out unavailable tracks.
+ * 6. Checks if enough valid tracks were found.
+ * 7. Calculates the total estimated duration of the validated tracks.
+ * 8. Calls an LLM action to generate a playlist name and description based on the validated tracks and theme.
+ * 9. Returns a `PlaylistPreviewData` object containing all necessary information for the client to display a preview.
  *
  * @param templateId - The UUID of the curated template selected by the user.
  * @returns A Promise resolving to an `ActionState`.
@@ -66,7 +71,7 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
       }
     }
     const userId = session.user.auratuneInternalId
-    // const userSpotifyAccessToken = session.accessToken; // Will be used for Spotify validation later
+    const userSpotifyAccessToken = session.accessToken;
 
     if (!templateId) {
       return { isSuccess: false, message: "Template ID is required." }
@@ -86,9 +91,6 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
     // 3. Fetch user's default playlist track count
     const settingsResult = await getUserSettingsAction(userId)
     if (!settingsResult.isSuccess || !settingsResult.data) {
-      // If settings are not found, use a sensible default or handle as error.
-      // For now, assuming createDefaultUserSettingsAction on login ensures settings exist.
-      // If critical, return error:
       return {
         isSuccess: false,
         message:
@@ -98,8 +100,7 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
     const userSettings = settingsResult.data
     const trackCount = userSettings.default_playlist_track_count
 
-    // 4. Call LLM to generate track suggestions (currently stubbed)
-    // User query data can be enriched with more context if needed in the future.
+    // 4. Call LLM to generate track suggestions (name/artist pairs)
     const userQueryDataForLLM = {
       theme: curatedTemplate.name,
       description: curatedTemplate.description,
@@ -119,30 +120,52 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
           "Failed to generate track suggestions from LLM.",
       }
     }
-    let suggestedTracks = trackSuggestionsResult.data // Type: OpenRouterTrackSuggestion[]
+    const llmSuggestedTracks = trackSuggestionsResult.data // Type: OpenRouterTrackSuggestion[]
 
-    // 5. Placeholder for Spotify track validation
-    // TODO (Step 7.4 & 7.5): Implement validateSpotifyTracksAction and integrate here.
-    // This step will take `suggestedTracks` (name/artist pairs), validate them against Spotify,
-    // and return `SpotifyApi.TrackObjectFull[]`.
-    // For now, `suggestedTracks` remains `OpenRouterTrackSuggestion[]`.
-    // If validation fails significantly (e.g., too few valid tracks), return error.
-    console.log(
-      "Placeholder: Spotify track validation would occur here. Using raw LLM suggestions for now."
+    // 5. Validate track suggestions against Spotify
+    const validationResult = await validateSpotifyTracksAction(userSpotifyAccessToken, llmSuggestedTracks)
+
+    if (!validationResult.isSuccess) {
+      return {
+        isSuccess: false,
+        message: validationResult.message || "Failed to validate tracks on Spotify."
+      }
+    }
+    const validatedTracks: SpotifyApi.TrackObjectFull[] = validationResult.data
+
+    // 6. Check if enough valid tracks were found
+    if (validatedTracks.length < MINIMUM_VALID_TRACKS) {
+      let message = `Could not find enough valid tracks on Spotify. Only ${validatedTracks.length} tracks were found (minimum ${MINIMUM_VALID_TRACKS} required).`;
+      if (validatedTracks.length > 0) {
+        message += " You can try saving these, or regenerate for more options."
+      } else {
+        message += " Please try regenerating or choose a different template."
+      }
+      // This is a user-facing "soft" error; they might still want to proceed with fewer tracks or regenerate.
+      // For now, let's treat it as a failure to meet expectations if it's below minimum.
+      // Consider how to inform user: if we proceed, the playlist will be short.
+      // For a stricter approach, make it a hard failure:
+      return {
+        isSuccess: false,
+        message: message,
+      };
+    }
+    if (validatedTracks.length < trackCount) {
+      console.warn(`AuraTune: Requested ${trackCount} tracks, but only ${validatedTracks.length} were validated on Spotify.`);
+      // Optionally, notify user subtly in the preview if count is less than requested but above minimum.
+    }
+
+
+    // 7. Calculate total estimated duration of validated tracks
+    const estimatedDurationMs = validatedTracks.reduce(
+      (total, track) => total + (track.duration_ms || 0),
+      0
     )
-    // Example of what might happen:
-    // const validationResult = await validateSpotifyTracksAction(userSpotifyAccessToken, suggestedTracks);
-    // if (!validationResult.isSuccess) { /* handle error */ }
-    // validatedTracks = validationResult.data; // This would be SpotifyApi.TrackObjectFull[]
-    // if (validatedTracks.length < MINIMUM_TRACKS_REQUIRED) { /* handle error */ }
-    
-    // For the purpose of this step, we'll use the stubbed suggestions directly for naming.
-    // In a real scenario, the validated and enriched tracks would be used.
 
-    // 6. Call LLM to generate playlist name and description (currently stubbed)
+    // 8. Call LLM to generate playlist name and description using validated tracks
     const playlistMetadataResult =
       await generatePlaylistNameAndDescriptionViaOpenRouterAction(
-        suggestedTracks, // Pass the raw suggestions for now
+        validatedTracks, // Pass validated Spotify tracks
         curatedTemplate.description // Use template description as theme context
       )
 
@@ -160,13 +183,13 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
     const { name: playlistName, description: playlistDescription } =
       playlistMetadataResult.data
 
-    // 7. Assemble and return PlaylistPreviewData
+    // 9. Assemble and return PlaylistPreviewData
     const playlistPreview: PlaylistPreviewData = {
-      tracks: suggestedTracks, // Will be SpotifyApi.TrackObjectFull[] after validation phase
+      tracks: validatedTracks,
       playlistName: playlistName,
       playlistDescription: playlistDescription,
-      totalTracks: suggestedTracks.length,
-      estimatedDurationMs: 0, // Placeholder: will be calculated from validated tracks later
+      totalTracks: validatedTracks.length,
+      estimatedDurationMs: estimatedDurationMs,
     }
 
     return {
