@@ -41,7 +41,7 @@ import { z } from "zod"
  */
 export async function generateTracksForPlaylistViaOpenRouterAction(
   systemPrompt: string,
-  userQueryData: { theme?: string; description?: string; [key: string]: any },
+  userQueryData: { theme?: string; description?: string;[key: string]: any },
   trackCount: number
 ): Promise<ActionState<OpenRouterTrackSuggestion[]>> {
   // Basic input validation
@@ -95,7 +95,9 @@ Ensure the track names and artist names are accurate.
     // Attempt to parse the LLM response string as JSON
     let parsedResponse: any
     try {
-      parsedResponse = JSON.parse(llmResponseString)
+      // Clean the response string by removing markdown code block formatting
+      const cleanedLlmResponseString = llmResponseString.replace(/^```json\s*|```$/g, '').trim();
+      parsedResponse = JSON.parse(cleanedLlmResponseString)
     } catch (parseError) {
       console.error("Failed to parse LLM response as JSON:", parseError)
       console.error("LLM Response String for track generation:", llmResponseString) // Log the problematic string
@@ -120,7 +122,7 @@ Ensure the track names and artist names are accurate.
       trackName: z.string().min(1, "Track name cannot be empty."),
       artistName: z.string().min(1, "Artist name cannot be empty."),
     });
-    
+
     const validationResult = z.array(trackSuggestionSchema).safeParse(parsedResponse);
 
     if (!validationResult.success) {
@@ -141,7 +143,7 @@ Ensure the track names and artist names are accurate.
         `LLM generated ${trackSuggestions.length} tracks, but ${trackCount} were requested.`
       )
     }
-     if (trackSuggestions.length === 0 && trackCount > 0) {
+    if (trackSuggestions.length === 0 && trackCount > 0) {
       return {
         isSuccess: false,
         message: "LLM generated an empty list of tracks despite being asked for more."
@@ -257,7 +259,7 @@ Remember to provide your response strictly in the specified JSON format.
     // Attempt to parse the LLM response string as JSON
     let parsedResponse: any
     try {
-      // Sometimes LLMs wrap their JSON in ```json ... ```, try to strip it.
+      // Clean the response string by removing markdown code block formatting
       const cleanedLlmResponseString = llmResponseString.replace(/^```json\s*|```$/g, '').trim();
       parsedResponse = JSON.parse(cleanedLlmResponseString)
     } catch (parseError) {
@@ -272,7 +274,7 @@ Remember to provide your response strictly in the specified JSON format.
           "Failed to parse LLM response for name/description. The format was not valid JSON.",
       }
     }
-    
+
     const validationResult = PlaylistNameAndDescriptionSchema.safeParse(parsedResponse);
 
     if (!validationResult.success) {
@@ -283,7 +285,7 @@ Remember to provide your response strictly in the specified JSON format.
         message: "LLM response for name/description has invalid structure or content.",
       };
     }
-    
+
     const playlistMetadata = validationResult.data;
 
     return {

@@ -151,13 +151,13 @@ export async function validateSpotifyTracksAction(
         continue
       }
 
-      // Construct a precise search query for Spotify.
-      // Using field filters (track: and artist:) generally yields better results.
-      const query = `track:"${suggestion.trackName}" artist:"${suggestion.artistName}"`
+      // Construct a more flexible search query for Spotify
+      // Remove quotes and use a simpler format that's more forgiving
+      const cleanTrackName = suggestion.trackName.replace(/["']/g, '');
+      const cleanArtistName = suggestion.artistName.replace(/["']/g, '');
+      const query = `${cleanTrackName} ${cleanArtistName}`;
 
-      // Search for the track, limiting to 1 result to get the most likely match.
-      // We could use the `searchSpotifyTracksAction` here, but direct use of spotifyApi
-      // allows for more specific error handling or logging if needed per suggestion.
+      // Search for the track, limiting to 1 result to get the most likely match
       const response = await spotifyApi.searchTracks(query, { limit: 1 })
 
       if (response.body.tracks && response.body.tracks.items.length > 0) {

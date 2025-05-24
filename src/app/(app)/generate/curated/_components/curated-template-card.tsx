@@ -10,6 +10,7 @@
  * - Dynamically renders icons: supports `lucide:<icon-name>` format and direct image URLs.
  *   Falls back to a default music icon if the specified icon is invalid or not found.
  * - Designed with hover effects to indicate interactivity.
+ * - Includes an `onClick` handler to trigger actions when the card is selected.
  *
  * @dependencies
  * - `react`: For component definition.
@@ -19,7 +20,7 @@
  * - `@/db/schema/curated-templates-schema`: For the `SelectCuratedTemplate` type.
  *
  * @notes
- * - Marked as `"use client"` because it will handle `onClick` events in a future step (Step 7.7).
+ * - Marked as `"use client"` because it handles `onClick` events.
  * - The icon rendering logic attempts to be flexible. Error handling for icon loading is included.
  */
 "use client"
@@ -38,8 +39,8 @@ import { SelectCuratedTemplate } from "@/db/schema/curated-templates-schema"
 
 interface CuratedTemplateCardProps {
   template: SelectCuratedTemplate
-  // onClick will be added in a later step:
-  // onClick: (templateId: string) => void;
+  onClick: (templateId: string) => void // Callback when the card is clicked
+  isLoading?: boolean // Optional: to disable card during an operation
 }
 
 /**
@@ -66,7 +67,6 @@ const TemplateIcon: React.FC<{
 
   if (iconUrl.startsWith("lucide:")) {
     const iconName = iconUrl.split(":")[1]
-    // Convert kebab-case (e.g., 'activity-square') or simple names ('brain') to PascalCase ('ActivitySquare', 'Brain')
     const pascalCaseIconName = iconName
       .split("-")
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -100,7 +100,7 @@ const TemplateIcon: React.FC<{
           src={iconUrl}
           alt={`${templateName} icon`}
           fill
-          sizes="40px" // Equivalent to h-10 w-10
+          sizes="40px"
           className="object-contain group-hover:scale-105 transition-transform duration-200"
         />
       </div>
@@ -115,20 +115,30 @@ const TemplateIcon: React.FC<{
 
 export default function CuratedTemplateCard({
   template,
+  onClick,
+  isLoading = false,
 }: CuratedTemplateCardProps): JSX.Element {
-  // In a future step, this card will be clickable:
-  // const handleClick = () => {
-  //   onClick(template.id);
-  // };
+  const handleClick = () => {
+    if (!isLoading) {
+      onClick(template.id)
+    }
+  }
 
   return (
     <Card
-      className="h-full flex flex-col group cursor-pointer 
-                 hover:shadow-xl hover:border-primary/50 transition-all duration-200 ease-in-out
-                 bg-card/80 backdrop-blur-sm hover:bg-card"
-      // onClick={handleClick} // To be enabled later
-      tabIndex={0} // Make it focusable
-      aria-label={`Select template: ${template.name}`}
+      className={`h-full flex flex-col group transition-all duration-200 ease-in-out
+                 bg-card/80 backdrop-blur-sm hover:bg-card
+                 ${isLoading ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:shadow-xl hover:border-primary/50"}`}
+      onClick={handleClick}
+      onKeyDown={(e) => {
+        if ((e.key === "Enter" || e.key === " ") && !isLoading) {
+          onClick(template.id)
+        }
+      }}
+      tabIndex={isLoading ? -1 : 0}
+      role="button"
+      aria-label={`Select template: ${template.name}. Description: ${template.description}`}
+      aria-disabled={isLoading}
       data-testid={`curated-template-card-${template.id}`}
     >
       <CardHeader className="items-center text-center pt-6 pb-4">
