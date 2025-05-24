@@ -2,7 +2,8 @@
  * @description
  * Server component for the AuraTune application's sidebar.
  * The sidebar provides primary navigation, allowing users to access different
- * sections of the application such as Dashboard, Generate Playlists, Analytics, and Settings.
+ * sections of the application such as Dashboard, Generate Playlists (Curated and Track Match),
+ * Analytics, and Settings.
  *
  * Key features:
  * - Declared as a server component (`"use server"`).
@@ -29,10 +30,11 @@ import React from "react"
 import Link from "next/link"
 import {
   LayoutDashboard,
-  Sparkles,
+  Sparkles, // Used for Curated Templates
+  ListMusic, // Using for Track Match
   BarChart3,
   Settings,
-  Music, // Example icon for AuraTune
+  Music, // Example icon for AuraTune app logo
 } from "lucide-react"
 
 // Define a type for navigation items for better structure and maintainability
@@ -44,7 +46,16 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/generate/curated", label: "Generate", icon: Sparkles }, // Points to curated as a default for "Generate"
+  {
+    href: "/generate/curated",
+    label: "Curated Templates",
+    icon: Sparkles,
+  },
+  {
+    href: "/generate/track-match",
+    label: "Track Match",
+    icon: ListMusic,
+  }, // New item for Track Match
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ]
