@@ -2,12 +2,14 @@
  * @description
  * Server actions for interacting with the Spotify API related to playlists and tracks.
  * This includes searching for tracks, validating track suggestions from LLMs,
- * and eventually creating and managing Spotify playlists.
+ * creating Spotify playlists, and adding tracks to them.
  *
  * Key features:
  * - `searchSpotifyTracksAction`: Performs a general search for tracks on Spotify.
  * - `validateSpotifyTracksAction`: Takes LLM-generated track suggestions (name/artist)
  *   and validates them against Spotify, returning full track objects.
+ * - `createSpotifyPlaylistAction`: Creates a new playlist on the user's Spotify account.
+ * - `addTracksToSpotifyPlaylistAction`: Adds a list of tracks to an existing Spotify playlist.
  *
  * @dependencies
  * - `spotify-web-api-node`: For interacting with the Spotify API and its types.
@@ -30,9 +32,6 @@ import { ActionState, OpenRouterTrackSuggestion } from "@/types"
  *
  * @param accessToken - The user's Spotify access token.
  * @param query - The search query string (e.g., track name, artist, album).
- * @param type - The type of item to search for. Currently hardcoded to 'track' as per step requirements,
- *               but designed to be extensible. For Spotify, this is part of the search method, not a parameter.
- *               The method `searchTracks` implies type='track'.
  * @param limit - The maximum number of results to return (1-50).
  * @returns A Promise resolving to an `ActionState`.
  *          On success, `data` contains an array of `SpotifyApi.TrackObjectFull` objects.
@@ -41,9 +40,6 @@ import { ActionState, OpenRouterTrackSuggestion } from "@/types"
 export async function searchSpotifyTracksAction(
   accessToken: string,
   query: string,
-  // 'type' parameter is illustrative; Spotify API methods are specific (e.g., searchTracks, searchArtists)
-  // For this function, we are focusing on tracks.
-  // type: "track", // This is implied by calling spotifyApi.searchTracks
   limit: number
 ): Promise<ActionState<SpotifyApi.TrackObjectFull[]>> {
   // Validate inputs
@@ -75,7 +71,6 @@ export async function searchSpotifyTracksAction(
   }
 
   try {
-    // The 'type' for search is implicitly 'track' when calling `searchTracks`.
     const response = await spotifyApi.searchTracks(query, { limit })
 
     if (response.body.tracks) {
@@ -86,7 +81,7 @@ export async function searchSpotifyTracksAction(
       }
     } else {
       return {
-        isSuccess: true, // Search was successful, but no tracks object found in response
+        isSuccess: true,
         message: "No tracks found for the given query.",
         data: [],
       }
@@ -127,7 +122,7 @@ export async function validateSpotifyTracksAction(
   }
   if (!trackSuggestions || trackSuggestions.length === 0) {
     return {
-      isSuccess: true, // Technically a success, but no tracks to validate
+      isSuccess: true,
       message: "No track suggestions provided to validate.",
       data: [],
     }
@@ -151,18 +146,13 @@ export async function validateSpotifyTracksAction(
         continue
       }
 
-      // Construct a more flexible search query for Spotify
-      // Remove quotes and use a simpler format that's more forgiving
       const cleanTrackName = suggestion.trackName.replace(/["']/g, '');
       const cleanArtistName = suggestion.artistName.replace(/["']/g, '');
       const query = `${cleanTrackName} ${cleanArtistName}`;
-
-      // Search for the track, limiting to 1 result to get the most likely match
       const response = await spotifyApi.searchTracks(query, { limit: 1 })
 
       if (response.body.tracks && response.body.tracks.items.length > 0) {
         const track = response.body.tracks.items[0]
-        // Add track only if its ID hasn't been added already (handles duplicates)
         if (track && track.id && !foundTrackIds.has(track.id)) {
           validatedTracks.push(track)
           foundTrackIds.add(track.id)
@@ -192,4 +182,184 @@ export async function validateSpotifyTracksAction(
   }
 }
 
-// Future actions like createSpotifyPlaylistAction, addTracksToSpotifyPlaylistAction will go here.
+/**
+ * Creates a new playlist on the user's Spotify account.
+ *
+ * @param accessToken - The user's Spotify access token.
+ * @param spotifyUserId - The user's Spotify ID (required by Spotify API to create playlist for the user).
+ * @param name - The name of the new playlist.
+ * @param description - A description for the new playlist (optional).
+ * @param isPublic - Whether the playlist should be public or private (defaults to false/private).
+ * @returns A Promise resolving to an `ActionState`.
+ *          On success, `data` contains the `SpotifyApi.CreatePlaylistResponse` object from Spotify.
+ *          On failure, `isSuccess` is false and `message` contains error details.
+ */
+export async function createSpotifyPlaylistAction(
+  accessToken: string,
+  spotifyUserId: string,
+  name: string,
+  description?: string,
+  isPublic: boolean = false // Default to private as per Spotify's recommendation for user-generated content
+): Promise<ActionState<SpotifyApi.CreatePlaylistResponse>> {
+  // Validate inputs
+  if (!accessToken) {
+    return {
+      isSuccess: false,
+      message: "Spotify access token is required to create a playlist.",
+    }
+  }
+  if (!spotifyUserId) {
+    return {
+      isSuccess: false,
+      message: "Spotify User ID is required to create a playlist.",
+    }
+  }
+  if (!name || name.trim() === "") {
+    return {
+      isSuccess: false,
+      message: "Playlist name cannot be empty.",
+    }
+  }
+  // Spotify playlist name length limit is 100 characters
+  if (name.length > 100) {
+    return {
+      isSuccess: false,
+      message: "Playlist name cannot exceed 100 characters."
+    }
+  }
+  // Spotify playlist description length limit is 300 characters
+  if (description && description.length > 300) {
+    return {
+      isSuccess: false,
+      message: "Playlist description cannot exceed 300 characters."
+    }
+  }
+
+
+  const spotifyApi = getSpotifyApi(accessToken)
+  if (!spotifyApi) {
+    return {
+      isSuccess: false,
+      message: "Failed to initialize Spotify API client for playlist creation.",
+    }
+  }
+
+  try {
+    const playlistOptions: { name: string; description?: string; public?: boolean; collaborative?: boolean } = {
+      name,
+      public: isPublic
+    }
+    if (description) playlistOptions.description = description
+
+    const response = await spotifyApi.createPlaylist(
+      spotifyUserId,
+      playlistOptions
+    )
+
+    if (response.body && response.statusCode === 201) { // 201 Created is success
+      return {
+        isSuccess: true,
+        message: `Playlist "${name}" created successfully on Spotify.`,
+        data: response.body,
+      }
+    } else {
+      // Handle other status codes or unexpected response structure
+      console.error("Unexpected response from Spotify during playlist creation:", response)
+      return {
+        isSuccess: false,
+        message:
+          `Failed to create playlist on Spotify. Status: ${response.statusCode}.`
+      }
+    }
+  } catch (error: any) {
+    console.error("Error creating Spotify playlist:", error)
+    const errorMessage =
+      error.body?.error?.message ||
+      error.message ||
+      "An unexpected error occurred while creating the playlist on Spotify."
+    return {
+      isSuccess: false,
+      message: errorMessage,
+    }
+  }
+}
+
+/**
+ * Adds a list of tracks to a specified Spotify playlist.
+ *
+ * @param accessToken - The user's Spotify access token.
+ * @param playlistId - The ID of the Spotify playlist to add tracks to.
+ * @param trackUris - An array of Spotify track URIs (e.g., "spotify:track:yourtrackid").
+ *                    Spotify API limits this to 100 tracks per request.
+ * @returns A Promise resolving to an `ActionState`.
+ *          On success, `data` contains the `SpotifyApi.AddTracksToPlaylistResponse` object (snapshot ID).
+ *          On failure, `isSuccess` is false and `message` contains error details.
+ */
+export async function addTracksToSpotifyPlaylistAction(
+  accessToken: string,
+  playlistId: string,
+  trackUris: string[]
+): Promise<ActionState<SpotifyApi.AddTracksToPlaylistResponse>> {
+  // Validate inputs
+  if (!accessToken) {
+    return {
+      isSuccess: false,
+      message: "Spotify access token is required to add tracks.",
+    }
+  }
+  if (!playlistId) {
+    return {
+      isSuccess: false,
+      message: "Playlist ID is required to add tracks.",
+    }
+  }
+  if (!trackUris || trackUris.length === 0) {
+    return {
+      isSuccess: false,
+      message: "At least one track URI is required to add tracks.",
+    }
+  }
+  if (trackUris.length > 100) {
+    // This action does not handle chunking. The calling action should manage this if >100 tracks.
+    return {
+      isSuccess: false,
+      message: "Cannot add more than 100 tracks at a time to a Spotify playlist. Please ensure the orchestrating action handles chunking for larger lists.",
+    }
+  }
+
+  const spotifyApi = getSpotifyApi(accessToken)
+  if (!spotifyApi) {
+    return {
+      isSuccess: false,
+      message: "Failed to initialize Spotify API client for adding tracks.",
+    }
+  }
+
+  try {
+    const response = await spotifyApi.addTracksToPlaylist(playlistId, trackUris)
+
+    if (response.body && response.statusCode === 201) { // 201 Created for adding tracks
+      return {
+        isSuccess: true,
+        message: "Tracks added to playlist successfully.",
+        data: response.body, // Contains snapshot_id
+      }
+    } else {
+      console.error("Unexpected response from Spotify when adding tracks:", response)
+      return {
+        isSuccess: false,
+        message: `Failed to add tracks to playlist. Status: ${response.statusCode}.`,
+      }
+    }
+  } catch (error: any) {
+    console.error("Error adding tracks to Spotify playlist:", error)
+    const errorMessage =
+      error.body?.error?.message ||
+      error.message ||
+      "An unexpected error occurred while adding tracks to the playlist."
+    return {
+      isSuccess: false,
+      message: errorMessage,
+    }
+  }
+}
