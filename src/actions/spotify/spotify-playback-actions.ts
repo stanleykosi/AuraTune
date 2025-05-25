@@ -1,0 +1,331 @@
+/**
+ * @description
+ * Server actions for controlling Spotify playback and fetching playback state.
+ * These actions interact directly with the Spotify Web API to manage music playback
+ * on behalf of the authenticated user. They are intended to be called from client-side
+ * components (via hooks) or other server-side logic.
+ *
+ * Key features:
+ * - Fetching the current playback state (`getCurrentPlaybackStateAction`).
+ * - Toggling play/pause (`togglePlayPauseAction`).
+ * - Skipping to the next or previous track (`nextTrackAction`, `previousTrackAction`).
+ * - Setting playback volume (`setVolumeAction`).
+ * - Toggling shuffle mode (`toggleShuffleAction`).
+ * - Setting repeat mode (`setRepeatModeAction`).
+ * - Seeking to a specific position in the current track (`seekToPositionAction`).
+ *
+ * @dependencies
+ * - `next-auth/next`: For `getServerSession` to retrieve user session data (including Spotify access token).
+ * - `@/lib/auth`: Provides `authOptions` for `getServerSession`.
+ * - `@/lib/spotify-sdk`: Provides the `getSpotifyApi` helper for an initialized Spotify API client.
+ * - `@/types`: For the `ActionState` return type.
+ * - `spotify-web-api-node`: For Spotify API interaction and types like `SpotifyApi.CurrentPlaybackResponse`.
+ *
+ * @notes
+ * - All actions are server-side only (`"use server"`).
+ * - Each action first retrieves the user's session and Spotify access token.
+ * - Proper error handling is implemented for API calls, including cases like no active device
+ *   or insufficient permissions (e.g., Spotify Premium required for some actions).
+ * - Most control actions return `ActionState<void>` as the primary mechanism for state updates
+ *   on the client will be polling through `useSpotifyPlayerSync` (to be implemented).
+ *   `getCurrentPlaybackStateAction` returns the full playback state.
+ */
+"use server"
+
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
+import { getSpotifyApi } from "@/lib/spotify-sdk"
+import { ActionState } from "@/types"
+import type SpotifyWebApi from "spotify-web-api-node"
+
+/**
+ * Helper function to handle common Spotify API call errors and return ActionState.
+ * @param error - The error object caught from the API call.
+ * @param actionName - Name of the action for logging.
+ * @returns ActionState indicating failure.
+ */
+function handleSpotifyApiError(error: any, actionName: string): ActionState<never> {
+  console.error(`Error in ${actionName}:`, error)
+  let message = `An unexpected error occurred in ${actionName}.`
+  if (error.body?.error?.reason === "NO_ACTIVE_DEVICE") {
+    message = "No active Spotify device found. Please start playback on a device."
+  } else if (error.body?.error?.reason === "PREMIUM_REQUIRED") {
+    message = "This action requires a Spotify Premium account."
+  } else if (error.body?.error?.message) {
+    message = error.body.error.message
+  } else if (error.message) {
+    message = error.message
+  }
+  return { isSuccess: false, message }
+}
+
+/**
+ * Retrieves the user's current Spotify playback state.
+ * This includes information about the currently playing track, device, progress, and playback settings.
+ *
+ * @returns A Promise resolving to an `ActionState`.
+ *          On success, `data` contains the `SpotifyApi.CurrentPlaybackResponse` object.
+ *          On failure, `isSuccess` is false, and `message` describes the error.
+ */
+export async function getCurrentPlaybackStateAction(): Promise<
+  ActionState<SpotifyApi.CurrentPlaybackResponse | null>
+> {
+  const session = await getServerSession(authOptions)
+  if (!session?.accessToken) {
+    return { isSuccess: false, message: "User not authenticated." }
+  }
+
+  const spotifyApi = getSpotifyApi(session.accessToken)
+  if (!spotifyApi) {
+    return { isSuccess: false, message: "Failed to initialize Spotify API client." }
+  }
+
+  try {
+    const response = await spotifyApi.getMyCurrentPlaybackState()
+    // If response.body is null or empty, it means nothing is playing or no active device.
+    // Spotify API returns 204 No Content if nothing is playing.
+    // The spotify-web-api-node wrapper might return an empty body or specific properties as null.
+    if (response.statusCode === 204 || !response.body || Object.keys(response.body).length === 0) {
+      return {
+        isSuccess: true,
+        message: "No playback state active or nothing is playing.",
+        data: null, // Explicitly indicate no active playback
+      }
+    }
+    return {
+      isSuccess: true,
+      message: "Playback state retrieved successfully.",
+      data: response.body,
+    }
+  } catch (error: any) {
+    return handleSpotifyApiError(error, "getCurrentPlaybackStateAction")
+  }
+}
+
+/**
+ * Toggles the playback state (play/pause) on Spotify.
+ * It first fetches the current state to determine whether to play or pause.
+ *
+ * @returns A Promise resolving to an `ActionState`.
+ *          On success, `data` contains an object `{ isPlaying: boolean }` indicating the new state.
+ *          On failure, `isSuccess` is false, and `message` describes the error.
+ */
+export async function togglePlayPauseAction(): Promise<ActionState<{ isPlaying: boolean }>> {
+  const session = await getServerSession(authOptions)
+  if (!session?.accessToken) {
+    return { isSuccess: false, message: "User not authenticated." }
+  }
+
+  const spotifyApi = getSpotifyApi(session.accessToken)
+  if (!spotifyApi) {
+    return { isSuccess: false, message: "Failed to initialize Spotify API client." }
+  }
+
+  try {
+    const playbackStateResponse = await spotifyApi.getMyCurrentPlaybackState()
+
+    let newIsPlayingState: boolean;
+
+    if (playbackStateResponse.body && playbackStateResponse.body.is_playing) {
+      await spotifyApi.pause()
+      newIsPlayingState = false
+    } else {
+      // If no body or not playing, attempt to play.
+      // This handles cases where playback is paused or no track is active.
+      // Spotify API might require a device_id if no device is active.
+      // The `play()` method can take a device_id if needed, but usually works on the active device.
+      await spotifyApi.play()
+      newIsPlayingState = true
+    }
+
+    return {
+      isSuccess: true,
+      message: `Playback ${newIsPlayingState ? "resumed" : "paused"} successfully.`,
+      data: { isPlaying: newIsPlayingState },
+    }
+  } catch (error: any) {
+    return handleSpotifyApiError(error, "togglePlayPauseAction")
+  }
+}
+
+/**
+ * Skips to the next track in the user's Spotify queue.
+ *
+ * @returns A Promise resolving to an `ActionState<void>`.
+ *          On success, indicates the command was sent.
+ *          On failure, `isSuccess` is false, and `message` describes the error.
+ */
+export async function nextTrackAction(): Promise<ActionState<void>> {
+  const session = await getServerSession(authOptions)
+  if (!session?.accessToken) {
+    return { isSuccess: false, message: "User not authenticated." }
+  }
+
+  const spotifyApi = getSpotifyApi(session.accessToken)
+  if (!spotifyApi) {
+    return { isSuccess: false, message: "Failed to initialize Spotify API client." }
+  }
+
+  try {
+    await spotifyApi.skipToNext()
+    return { isSuccess: true, message: "Skipped to next track.", data: undefined }
+  } catch (error: any) {
+    return handleSpotifyApiError(error, "nextTrackAction")
+  }
+}
+
+/**
+ * Skips to the previous track in the user's Spotify queue.
+ *
+ * @returns A Promise resolving to an `ActionState<void>`.
+ *          On success, indicates the command was sent.
+ *          On failure, `isSuccess` is false, and `message` describes the error.
+ */
+export async function previousTrackAction(): Promise<ActionState<void>> {
+  const session = await getServerSession(authOptions)
+  if (!session?.accessToken) {
+    return { isSuccess: false, message: "User not authenticated." }
+  }
+
+  const spotifyApi = getSpotifyApi(session.accessToken)
+  if (!spotifyApi) {
+    return { isSuccess: false, message: "Failed to initialize Spotify API client." }
+  }
+
+  try {
+    await spotifyApi.skipToPrevious()
+    return { isSuccess: true, message: "Skipped to previous track.", data: undefined }
+  } catch (error: any) {
+    return handleSpotifyApiError(error, "previousTrackAction")
+  }
+}
+
+/**
+ * Sets the playback volume on Spotify.
+ *
+ * @param volumePercent - The desired volume percentage (0-100).
+ * @returns A Promise resolving to an `ActionState<void>`.
+ *          On success, indicates the command was sent.
+ *          On failure, `isSuccess` is false, and `message` describes the error.
+ */
+export async function setVolumeAction(volumePercent: number): Promise<ActionState<void>> {
+  const session = await getServerSession(authOptions)
+  if (!session?.accessToken) {
+    return { isSuccess: false, message: "User not authenticated." }
+  }
+
+  if (volumePercent < 0 || volumePercent > 100) {
+    return { isSuccess: false, message: "Volume must be between 0 and 100." }
+  }
+
+  const spotifyApi = getSpotifyApi(session.accessToken)
+  if (!spotifyApi) {
+    return { isSuccess: false, message: "Failed to initialize Spotify API client." }
+  }
+
+  try {
+    await spotifyApi.setVolume(volumePercent)
+    return { isSuccess: true, message: `Volume set to ${volumePercent}%.`, data: undefined }
+  } catch (error: any) {
+    return handleSpotifyApiError(error, "setVolumeAction")
+  }
+}
+
+/**
+ * Toggles shuffle mode on Spotify.
+ *
+ * @param shuffleState - The desired shuffle state (true for on, false for off).
+ * @returns A Promise resolving to an `ActionState<void>`.
+ *          On success, indicates the command was sent.
+ *          On failure, `isSuccess` is false, and `message` describes the error.
+ */
+export async function toggleShuffleAction(shuffleState: boolean): Promise<ActionState<void>> {
+  const session = await getServerSession(authOptions)
+  if (!session?.accessToken) {
+    return { isSuccess: false, message: "User not authenticated." }
+  }
+
+  const spotifyApi = getSpotifyApi(session.accessToken)
+  if (!spotifyApi) {
+    return { isSuccess: false, message: "Failed to initialize Spotify API client." }
+  }
+
+  try {
+    await spotifyApi.setShuffle(shuffleState)
+    return {
+      isSuccess: true,
+      message: `Shuffle mode ${shuffleState ? "enabled" : "disabled"}.`,
+      data: undefined
+    }
+  } catch (error: any) {
+    return handleSpotifyApiError(error, "toggleShuffleAction")
+  }
+}
+
+/**
+ * Sets the repeat mode on Spotify.
+ *
+ * @param repeatState - The desired repeat state ('track', 'context', or 'off').
+ * @returns A Promise resolving to an `ActionState<void>`.
+ *          On success, indicates the command was sent.
+ *          On failure, `isSuccess` is false, and `message` describes the error.
+ */
+export async function setRepeatModeAction(
+  repeatState: "track" | "context" | "off"
+): Promise<ActionState<void>> {
+  const session = await getServerSession(authOptions)
+  if (!session?.accessToken) {
+    return { isSuccess: false, message: "User not authenticated." }
+  }
+
+  const validRepeatStates = ["track", "context", "off"] as const
+  if (!validRepeatStates.includes(repeatState)) {
+    return {
+      isSuccess: false,
+      message: "Invalid repeat state. Must be 'track', 'context', or 'off'.",
+    }
+  }
+
+  const spotifyApi = getSpotifyApi(session.accessToken)
+  if (!spotifyApi) {
+    return { isSuccess: false, message: "Failed to initialize Spotify API client." }
+  }
+
+  try {
+    await spotifyApi.setRepeat(repeatState)
+    return { isSuccess: true, message: `Repeat mode set to ${repeatState}.`, data: undefined }
+  } catch (error: any) {
+    return handleSpotifyApiError(error, "setRepeatModeAction")
+  }
+}
+
+/**
+ * Seeks to a specific position in the currently playing track on Spotify.
+ *
+ * @param positionMs - The position in milliseconds to seek to.
+ * @returns A Promise resolving to an `ActionState<void>`.
+ *          On success, indicates the command was sent.
+ *          On failure, `isSuccess` is false, and `message` describes the error.
+ */
+export async function seekToPositionAction(positionMs: number): Promise<ActionState<void>> {
+  const session = await getServerSession(authOptions)
+  if (!session?.accessToken) {
+    return { isSuccess: false, message: "User not authenticated." }
+  }
+
+  if (positionMs < 0) {
+    return { isSuccess: false, message: "Position must be a non-negative number." }
+  }
+
+  const spotifyApi = getSpotifyApi(session.accessToken)
+  if (!spotifyApi) {
+    return { isSuccess: false, message: "Failed to initialize Spotify API client." }
+  }
+
+  try {
+    await spotifyApi.seek(positionMs)
+    return { isSuccess: true, message: `Seeked to position ${positionMs}ms.`, data: undefined }
+  } catch (error: any) {
+    return handleSpotifyApiError(error, "seekToPositionAction")
+  }
+}
