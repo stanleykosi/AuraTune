@@ -60,6 +60,53 @@ function handleSpotifyApiError(error: any, actionName: string): ActionState<neve
 }
 
 /**
+ * Helper function to retry API calls with exponential backoff
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelay: number = 1000
+): Promise<T> {
+  let lastError: any
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn()
+    } catch (error: any) {
+      lastError = error
+      if (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED') {
+        const delayMs = initialDelay * Math.pow(2, i) // Exponential backoff
+        console.log(`Retry attempt ${i + 1}/${maxRetries} after ${delayMs}ms delay`)
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+        continue
+      }
+      throw error // If it's not a network error, throw immediately
+    }
+  }
+  throw lastError
+}
+
+/**
+ * Helper function to find explicit version of a track
+ */
+async function findExplicitVersion(
+  spotifyApi: SpotifyWebApi,
+  trackName: string,
+  artistName: string,
+  market: string = 'US'
+): Promise<SpotifyApi.TrackObjectFull | undefined> {
+  try {
+    const searchQuery = `${trackName} ${artistName} explicit`
+    const searchResults = await retryWithBackoff(() =>
+      spotifyApi.searchTracks(searchQuery, { limit: 5, market })
+    )
+    return searchResults.body.tracks?.items.find(track => track.explicit)
+  } catch (error) {
+    console.error('Error searching for explicit version:', error)
+    return undefined
+  }
+}
+
+/**
  * Retrieves the user's current Spotify playback state.
  * This includes information about the currently playing track, device, progress, and playback settings.
  *
@@ -123,13 +170,17 @@ export async function togglePlayPauseAction(): Promise<ActionState<{ isPlaying: 
 
   try {
     // Get current playback state first
-    const playbackStateResponse = await spotifyApi.getMyCurrentPlaybackState()
+    const playbackStateResponse = await retryWithBackoff(() =>
+      spotifyApi.getMyCurrentPlaybackState()
+    )
     const isPlaying = playbackStateResponse.body?.is_playing
     const currentDevice = playbackStateResponse.body?.device
     const currentTrack = playbackStateResponse.body?.item
 
     // Get available devices
-    const devicesResponse = await spotifyApi.getMyDevices()
+    const devicesResponse = await retryWithBackoff(() =>
+      spotifyApi.getMyDevices()
+    )
     const availableDevices = devicesResponse.body.devices
 
     if (!availableDevices || availableDevices.length === 0) {
@@ -156,15 +207,17 @@ export async function togglePlayPauseAction(): Promise<ActionState<{ isPlaying: 
       }
     }
 
+    const deviceId = targetDevice.id // Store the ID in a variable to satisfy TypeScript
+
     // Execute device transfer and playback in parallel if needed
     const transferPromise = targetDevice && !targetDevice.is_active
-      ? spotifyApi.transferMyPlayback([targetDevice.id], { play: false })
+      ? retryWithBackoff(() => spotifyApi.transferMyPlayback([deviceId], { play: false }))
       : Promise.resolve()
 
     await transferPromise
 
     if (isPlaying) {
-      await spotifyApi.pause({ device_id: targetDevice.id })
+      await retryWithBackoff(() => spotifyApi.pause({ device_id: deviceId }))
       return {
         isSuccess: true,
         message: "Playback paused successfully.",
@@ -172,19 +225,73 @@ export async function togglePlayPauseAction(): Promise<ActionState<{ isPlaying: 
       }
     } else {
       if (!currentTrack) {
-        const recentTracks = await spotifyApi.getMyRecentlyPlayedTracks({ limit: 1 })
+        const recentTracks = await retryWithBackoff(() =>
+          spotifyApi.getMyRecentlyPlayedTracks({ limit: 1 })
+        )
         if (!recentTracks.body.items.length) {
           return {
             isSuccess: false,
             message: "No track available to play. Please select a track in Spotify first."
           }
         }
-        await spotifyApi.play({
-          device_id: targetDevice.id,
-          uris: [recentTracks.body.items[0].track.uri]
-        })
+        // Get the track details to check for explicit version
+        const trackId = recentTracks.body.items[0].track.id
+        const trackDetails = await retryWithBackoff(() =>
+          spotifyApi.getTrack(trackId, { market: 'US' })
+        )
+
+        // If the track is not explicit, try to find the explicit version
+        if (!trackDetails.body.explicit) {
+          const explicitVersion = await findExplicitVersion(
+            spotifyApi,
+            trackDetails.body.name,
+            trackDetails.body.artists[0].name
+          )
+
+          if (explicitVersion) {
+            await retryWithBackoff(() => spotifyApi.play({
+              device_id: deviceId,
+              uris: [explicitVersion.uri]
+            }))
+          } else {
+            // If no explicit version found, play the original
+            await retryWithBackoff(() => spotifyApi.play({
+              device_id: deviceId,
+              uris: [recentTracks.body.items[0].track.uri]
+            }))
+          }
+        } else {
+          await retryWithBackoff(() => spotifyApi.play({
+            device_id: deviceId,
+            uris: [recentTracks.body.items[0].track.uri]
+          }))
+        }
       } else {
-        await spotifyApi.play({ device_id: targetDevice.id })
+        // Check if current track is explicit
+        const trackDetails = await retryWithBackoff(() =>
+          spotifyApi.getTrack(currentTrack.id, { market: 'US' })
+        )
+
+        // If the track is not explicit, try to find the explicit version
+        if (!trackDetails.body.explicit) {
+          const explicitVersion = await findExplicitVersion(
+            spotifyApi,
+            trackDetails.body.name,
+            trackDetails.body.artists[0].name
+          )
+
+          if (explicitVersion) {
+            await retryWithBackoff(() => spotifyApi.play({
+              device_id: deviceId,
+              uris: [explicitVersion.uri]
+            }))
+          } else {
+            // If no explicit version found, play the original
+            await retryWithBackoff(() => spotifyApi.play({ device_id: deviceId }))
+          }
+        } else {
+          await retryWithBackoff(() => spotifyApi.play({ device_id: deviceId }))
+        }
       }
       return {
         isSuccess: true,
@@ -225,11 +332,38 @@ export async function nextTrackAction(): Promise<ActionState<void>> {
       return { isSuccess: false, message: "No active device found. Please start playback first." }
     }
 
-    // Execute skip and play in parallel if needed
-    const skipPromise = spotifyApi.skipToNext({ device_id: currentDevice.id })
-    const playPromise = isPlaying ? spotifyApi.play({ device_id: currentDevice.id }) : Promise.resolve()
+    // Skip to next track
+    await spotifyApi.skipToNext({ device_id: currentDevice.id })
 
-    await Promise.all([skipPromise, playPromise])
+    // Get the new track details
+    const newPlaybackState = await spotifyApi.getMyCurrentPlaybackState()
+    const newTrack = newPlaybackState.body?.item
+
+    if (newTrack) {
+      // Check if the new track is explicit
+      const trackDetails = await spotifyApi.getTrack(newTrack.id, { market: 'US' })
+
+      // If the track is not explicit, try to find the explicit version
+      if (!trackDetails.body.explicit) {
+        const searchQuery = `${trackDetails.body.name} ${trackDetails.body.artists[0].name} explicit`
+        const searchResults = await spotifyApi.searchTracks(searchQuery, { limit: 5, market: 'US' })
+        const explicitVersion = searchResults.body.tracks?.items.find(track => track.explicit)
+
+        if (explicitVersion) {
+          // Play the explicit version instead
+          await spotifyApi.play({
+            device_id: currentDevice.id,
+            uris: [explicitVersion.uri]
+          })
+        }
+      }
+    }
+
+    // Resume playback if it was playing
+    if (isPlaying) {
+      await spotifyApi.play({ device_id: currentDevice.id })
+    }
+
     return { isSuccess: true, message: "Skipped to next track.", data: undefined }
   } catch (error: any) {
     return handleSpotifyApiError(error, "nextTrackAction")
@@ -264,11 +398,38 @@ export async function previousTrackAction(): Promise<ActionState<void>> {
       return { isSuccess: false, message: "No active device found. Please start playback first." }
     }
 
-    // Execute skip and play in parallel if needed
-    const skipPromise = spotifyApi.skipToPrevious({ device_id: currentDevice.id })
-    const playPromise = isPlaying ? spotifyApi.play({ device_id: currentDevice.id }) : Promise.resolve()
+    // Skip to previous track
+    await spotifyApi.skipToPrevious({ device_id: currentDevice.id })
 
-    await Promise.all([skipPromise, playPromise])
+    // Get the new track details
+    const newPlaybackState = await spotifyApi.getMyCurrentPlaybackState()
+    const newTrack = newPlaybackState.body?.item
+
+    if (newTrack) {
+      // Check if the new track is explicit
+      const trackDetails = await spotifyApi.getTrack(newTrack.id, { market: 'US' })
+
+      // If the track is not explicit, try to find the explicit version
+      if (!trackDetails.body.explicit) {
+        const searchQuery = `${trackDetails.body.name} ${trackDetails.body.artists[0].name} explicit`
+        const searchResults = await spotifyApi.searchTracks(searchQuery, { limit: 5, market: 'US' })
+        const explicitVersion = searchResults.body.tracks?.items.find(track => track.explicit)
+
+        if (explicitVersion) {
+          // Play the explicit version instead
+          await spotifyApi.play({
+            device_id: currentDevice.id,
+            uris: [explicitVersion.uri]
+          })
+        }
+      }
+    }
+
+    // Resume playback if it was playing
+    if (isPlaying) {
+      await spotifyApi.play({ device_id: currentDevice.id })
+    }
+
     return { isSuccess: true, message: "Skipped to previous track.", data: undefined }
   } catch (error: any) {
     return handleSpotifyApiError(error, "previousTrackAction")
