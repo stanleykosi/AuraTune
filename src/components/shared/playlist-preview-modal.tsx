@@ -45,7 +45,9 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import TrackListItem from "@/components/shared/track-list-item"
 import { PlaylistPreviewData } from "@/types"
-import { ListMusic, Clock, Edit3, Save, XCircle } from "lucide-react"
+import { ListMusic, Clock, Edit3, Save, XCircle, Play } from "lucide-react"
+import { useSpotifyWebPlayback } from "@/lib/hooks/use-spotify-web-playback"
+import { toast } from "sonner"
 
 interface PlaylistPreviewModalProps {
   isOpen: boolean
@@ -88,6 +90,7 @@ export default function PlaylistPreviewModal({
 }: PlaylistPreviewModalProps): JSX.Element | null {
   const [editedName, setEditedName] = useState("")
   const [editedDescription, setEditedDescription] = useState("")
+  const { isReady, state, play, togglePlay } = useSpotifyWebPlayback()
 
   useEffect(() => {
     if (playlistData) {
@@ -96,12 +99,28 @@ export default function PlaylistPreviewModal({
     }
   }, [playlistData])
 
-  if (!playlistData) {
-    return null // Or some fallback if the modal is open without data (should ideally not happen)
+  const handlePlayTrack = async (track: SpotifyApi.TrackObjectFull) => {
+    if (!isReady) {
+      toast.error("Please wait for the player to initialize")
+      return
+    }
+
+    try {
+      // Start playback of the track using its URI
+      await play(track.uri)
+      toast.success(`Playing ${track.name}`)
+    } catch (error) {
+      console.error("Error playing track:", error)
+      toast.error("Failed to play track")
+    }
   }
 
   const handleSave = () => {
     onSave(editedName, editedDescription)
+  }
+
+  if (!playlistData) {
+    return null // Or some fallback if the modal is open without data (should ideally not happen)
   }
 
   return (
@@ -114,7 +133,7 @@ export default function PlaylistPreviewModal({
           </DialogTitle>
           <DialogDescription>
             Review your AI-generated playlist. You can edit the name and
-            description before saving.
+            description before saving. {isReady ? "Click the play button on any track to preview it." : "Please wait for the player to initialize..."}
           </DialogDescription>
         </DialogHeader>
 
@@ -170,7 +189,13 @@ export default function PlaylistPreviewModal({
             {playlistData.tracks.length > 0 ? (
               <div className="max-h-[300px] overflow-y-auto border rounded-md divide-y divide-border">
                 {playlistData.tracks.map((track, index) => (
-                  <TrackListItem key={track.id || `track-${index}`} track={track} index={index} />
+                  <TrackListItem
+                    key={track.id || `track-${index}`}
+                    track={track}
+                    index={index}
+                    onPlay={handlePlayTrack}
+                    isPlaying={state.currentTrack?.id === track.id && state.isPlaying}
+                  />
                 ))}
               </div>
             ) : (

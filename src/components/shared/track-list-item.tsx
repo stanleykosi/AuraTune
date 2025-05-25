@@ -26,11 +26,14 @@
 import React from "react"
 import Image from "next/image"
 import type SpotifyWebApi from "spotify-web-api-node"
-import { Music2 } from "lucide-react"
+import { Music2, Play } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 interface TrackListItemProps {
   track: SpotifyApi.TrackObjectFull
   index: number // For unique key and ARIA attributes
+  onPlay?: (track: SpotifyApi.TrackObjectFull) => void
+  isPlaying?: boolean
 }
 
 /**
@@ -48,6 +51,8 @@ function formatDuration(ms: number): string {
 export default function TrackListItem({
   track,
   index,
+  onPlay,
+  isPlaying,
 }: TrackListItemProps): JSX.Element {
   const albumArtUrl = track.album?.images?.[0]?.url
   const trackName = track.name
@@ -56,61 +61,46 @@ export default function TrackListItem({
   const duration = track.duration_ms ? formatDuration(track.duration_ms) : "--:--"
 
   return (
-    <div
-      className="flex items-center p-3 hover:bg-accent/10 rounded-md transition-colors duration-150"
-      role="listitem"
-      aria-labelledby={`track-name-${index}`}
-      aria-describedby={`track-artists-${index} track-album-${index}`}
-    >
-      <div className="w-10 text-sm text-muted-foreground text-right mr-3 shrink-0">
-        {index + 1}.
-      </div>
-      <div className="relative w-12 h-12 mr-4 shrink-0">
+    <div className="flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors group">
+      <div className="relative w-10 h-10 flex-shrink-0">
         {albumArtUrl ? (
           <Image
             src={albumArtUrl}
             alt={`Album art for ${albumName || trackName}`}
             fill
-            sizes="48px"
-            className="rounded object-cover"
+            className="object-cover rounded"
           />
         ) : (
-          <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
-            <Music2 className="h-6 w-6 text-muted-foreground" />
+          <div className="w-full h-full bg-secondary flex items-center justify-center rounded">
+            <Music2 className="h-5 w-5 text-muted-foreground" />
           </div>
         )}
       </div>
-
-      <div className="flex-grow overflow-hidden mr-4">
+      <div className="flex-grow min-w-0">
         <p
-          id={`track-name-${index}`}
-          className="text-sm font-medium text-foreground truncate"
+          className="text-sm font-medium truncate"
           title={trackName}
         >
           {trackName || "Unknown Track"}
         </p>
         <p
-          id={`track-artists-${index}`}
           className="text-xs text-muted-foreground truncate"
           title={artists}
         >
           {artists || "Unknown Artist"}
         </p>
       </div>
-
-      <div className="hidden sm:block flex-grow overflow-hidden mr-4 min-w-0 sm:w-1/4">
-        <p
-          id={`track-album-${index}`}
-          className="text-xs text-muted-foreground truncate"
-          title={albumName}
+      {onPlay && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={() => onPlay(track)}
+          aria-label={`Play ${trackName}`}
         >
-          {albumName || "Unknown Album"}
-        </p>
-      </div>
-      
-      <div className="text-xs text-muted-foreground shrink-0">
-        {duration}
-      </div>
+          <Play className="h-4 w-4" />
+        </Button>
+      )}
     </div>
   )
 }

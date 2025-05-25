@@ -45,14 +45,17 @@ import {
 import type SpotifyWebApi from "spotify-web-api-node"
 
 // Constants for polling and progress updates
-const POLLING_INTERVAL = 5000 // Sync with Spotify every 5 seconds
+const POLLING_INTERVAL = 1000 // Sync with Spotify every 1 second for more responsive updates
 const PROGRESS_UPDATE_INTERVAL = 1000 // Update local progress every 1 second
+const SYNC_AFTER_CONTROL_DELAY = 500 // Reduced delay after control action
+const DEVICE_CHECK_INTERVAL = 2000 // Check device state every 2 seconds
 
 // Action types for the player state reducer
 type PlayerReducerAction =
   | { type: "SET_STATE_FROM_API"; payload: SpotifyApi.CurrentPlaybackResponse | null }
   | { type: "SET_IS_PLAYING_OPTIMISTIC"; payload: boolean }
   | { type: "SET_PROGRESS_LOCAL"; payload: number }
+  | { type: "SET_VOLUME"; payload: number }
   | { type: "SET_ERROR"; payload: string | null }
   | { type: "SET_SYNCING"; payload: boolean }
   | { type: "RESET_TO_INITIAL" }
@@ -63,12 +66,18 @@ const playerReducer = (state: PlayerState, action: PlayerReducerAction): PlayerS
     case "SET_STATE_FROM_API": {
       const apiState = action.payload
       if (!apiState || !apiState.device || apiState.device.id === null) {
-        // No active device, or Spotify returned minimal/null state
+        // Only update device state if we have a previous device and this is a device error
+        if (state.deviceId && state.error?.includes("device")) {
+          return {
+            ...state,
+            hasActiveDevice: false,
+            error: "No active device found",
+            isSyncing: false,
+          }
+        }
+        // Otherwise maintain current state
         return {
-          ...initialPlayerState, // Reset to a known inactive state
-          volumePercent: apiState?.device?.volume_percent ?? state.volumePercent, // Preserve volume if possible
-          hasActiveDevice: false,
-          error: state.error, // Preserve existing error unless it's specifically cleared
+          ...state,
           isSyncing: false,
         }
       }
@@ -99,7 +108,7 @@ const playerReducer = (state: PlayerState, action: PlayerReducerAction): PlayerS
         deviceName: apiState.device.name,
         deviceType: apiState.device.type,
         hasActiveDevice: true,
-        error: null, // Clear previous errors on successful sync
+        error: null,
         isSyncing: false,
       }
     }
@@ -112,6 +121,8 @@ const playerReducer = (state: PlayerState, action: PlayerReducerAction): PlayerS
         : Math.max(0, action.payload)
       return { ...state, progressMs: newProgress }
     }
+    case "SET_VOLUME":
+      return { ...state, volumePercent: action.payload }
     case "SET_ERROR":
       return { ...state, error: action.payload, isSyncing: false }
     case "SET_SYNCING":
@@ -135,48 +146,75 @@ export function useSpotifyPlayerSync() {
   const syncPlaybackState = useCallback(
     async (isTriggeredByControl: boolean = false) => {
       if (sessionStatus !== "authenticated") {
-        dispatch({ type: "RESET_TO_INITIAL" }) // Reset if session is lost
+        dispatch({ type: "RESET_TO_INITIAL" })
         dispatch({ type: "SET_ERROR", payload: "User not authenticated." })
         return
       }
 
-      // Set syncing state, especially if triggered by a control action
-      // or if it's the first sync. Avoid rapid toggling for background polls.
-      if (isTriggeredByControl || state.isSyncing) {
-         dispatch({ type: "SET_SYNCING", payload: true })
+      if (isTriggeredByControl) {
+        dispatch({ type: "SET_SYNCING", payload: true })
       }
 
+      try {
+        const result = await getCurrentPlaybackStateAction()
 
-      const result = await getCurrentPlaybackStateAction()
-
-      if (result.isSuccess) {
-        dispatch({ type: "SET_STATE_FROM_API", payload: result.data })
-      } else {
-        dispatch({ type: "SET_ERROR", payload: result.message })
-        // Specific handling if no device is found based on message content
-        if (result.message.includes("No active Spotify device found")) {
-          dispatch({ type: "SET_STATE_FROM_API", payload: null }) // This will reset to an inactive state
+        if (result.isSuccess) {
+          dispatch({ type: "SET_STATE_FROM_API", payload: result.data })
+        } else {
+          // Handle device errors more gracefully
+          if (result.message.includes("No active Spotify device found")) {
+            // Only update device state if we don't have a previous device
+            if (!state.deviceId) {
+              dispatch({ type: "SET_ERROR", payload: result.message })
+            }
+          } else {
+            dispatch({ type: "SET_ERROR", payload: result.message })
+            // Only reset state on non-device errors
+            if (!result.message.includes("device")) {
+              dispatch({ type: "SET_STATE_FROM_API", payload: null })
+            }
+          }
+        }
+      } catch (error) {
+        // Don't update device state on network errors
+        if (!state.deviceId) {
+          dispatch({ type: "SET_ERROR", payload: "Failed to sync with Spotify" })
+        }
+      } finally {
+        if (isTriggeredByControl) {
+          dispatch({ type: "SET_SYNCING", payload: false })
         }
       }
     },
-    [sessionStatus, state.isSyncing] // dispatch is stable
+    [sessionStatus, state.deviceId]
   )
 
   // Effect for initial sync and periodic polling
   useEffect(() => {
     if (sessionStatus === "authenticated") {
-      syncPlaybackState(true) // Initial sync, consider it like a control trigger for loading state
-      const intervalId = setInterval(
-        () => syncPlaybackState(false), // Subsequent polls are background
+      syncPlaybackState(true)
+
+      // Main polling interval for playback state
+      const playbackInterval = setInterval(
+        () => syncPlaybackState(false),
         POLLING_INTERVAL
       )
-      return () => clearInterval(intervalId)
-    } else if (sessionStatus === "unauthenticated" && !state.isSyncing) {
-      // If user logs out and we are not already resetting
+
+      // Separate interval for device state checks
+      const deviceInterval = setInterval(
+        () => syncPlaybackState(false),
+        DEVICE_CHECK_INTERVAL
+      )
+
+      return () => {
+        clearInterval(playbackInterval)
+        clearInterval(deviceInterval)
+      }
+    } else if (sessionStatus === "unauthenticated") {
       dispatch({ type: "RESET_TO_INITIAL" })
       dispatch({ type: "SET_ERROR", payload: "User logged out." })
     }
-  }, [sessionStatus, syncPlaybackState, state.isSyncing])
+  }, [sessionStatus, syncPlaybackState])
 
   // Effect for local progress simulation
   useEffect(() => {
@@ -204,44 +242,100 @@ export function useSpotifyPlayerSync() {
   // --- Playback Control Functions ---
 
   const commonControlHandler = async (
-    action: () => Promise<any>, // The server action to call
-    optimisticUpdate?: () => void // Optional optimistic UI update
+    action: () => Promise<any>,
+    optimisticUpdate?: () => void
   ) => {
     if (sessionStatus !== "authenticated") {
       toast.error("You must be logged in to control playback.")
       return
     }
-    if (!state.hasActiveDevice && !action.name.includes("togglePlayPauseAction")) { 
-      // Allow play/pause attempt even without active device, Spotify might pick one.
-      // For other actions like next/prev, an active device is more critical.
+
+    // Special handling for play/pause
+    const isPlayPauseAction = action.name.includes("togglePlayPauseAction")
+
+    // For play/pause, we'll try to get the current state first
+    if (isPlayPauseAction) {
+      try {
+        const currentState = await getCurrentPlaybackStateAction()
+
+        // For play action, we'll proceed even without an active device
+        // Spotify will automatically select an available device
+        if (currentState.isSuccess) {
+          dispatch({ type: "SET_SYNCING", payload: true })
+          if (optimisticUpdate) optimisticUpdate()
+
+          const result = await action()
+          if (result.isSuccess) {
+            if (result.message) toast.success(result.message, { duration: 2000 })
+            await syncPlaybackState(true)
+            setTimeout(() => syncPlaybackState(true), SYNC_AFTER_CONTROL_DELAY)
+          } else {
+            if (result.message) toast.error(result.message)
+            dispatch({ type: "SET_ERROR", payload: result.message })
+            await syncPlaybackState(true)
+          }
+        } else {
+          // If we can't get the current state, still try to play
+          // This handles the case where there's no active device yet
+          dispatch({ type: "SET_SYNCING", payload: true })
+          if (optimisticUpdate) optimisticUpdate()
+
+          const result = await action()
+          if (result.isSuccess) {
+            if (result.message) toast.success(result.message, { duration: 2000 })
+            await syncPlaybackState(true)
+            setTimeout(() => syncPlaybackState(true), SYNC_AFTER_CONTROL_DELAY)
+          } else {
+            if (result.message) toast.error(result.message)
+            dispatch({ type: "SET_ERROR", payload: result.message })
+            await syncPlaybackState(true)
+          }
+        }
+      } catch (error) {
+        toast.error("Failed to execute playback control")
+        dispatch({ type: "SET_ERROR", payload: "Control action failed" })
+        await syncPlaybackState(true)
+      }
+      return
+    }
+
+    // For other controls, check for active device
+    if (!state.hasActiveDevice) {
       toast.error("No active Spotify device. Please start playback on a device.")
-      return;
+      return
     }
 
     dispatch({ type: "SET_SYNCING", payload: true })
-    if (optimisticUpdate) optimisticUpdate();
+    if (optimisticUpdate) optimisticUpdate()
 
-    const result = await action()
-
-    if (result.isSuccess) {
-      if (result.message) toast.success(result.message, { duration: 2000 })
-    } else {
-      if (result.message) toast.error(result.message)
-      dispatch({ type: "SET_ERROR", payload: result.message })
+    try {
+      const result = await action()
+      if (result.isSuccess) {
+        if (result.message) toast.success(result.message, { duration: 2000 })
+        await syncPlaybackState(true)
+        setTimeout(() => syncPlaybackState(true), SYNC_AFTER_CONTROL_DELAY)
+      } else {
+        if (result.message) toast.error(result.message)
+        dispatch({ type: "SET_ERROR", payload: result.message })
+        await syncPlaybackState(true)
+      }
+    } catch (error) {
+      toast.error("Failed to execute playback control")
+      dispatch({ type: "SET_ERROR", payload: "Control action failed" })
+      await syncPlaybackState(true)
     }
-    await syncPlaybackState(true) // Force sync after control action
   }
 
   const play = useCallback(() => {
-    if (state.isPlaying) return; // Already playing
+    if (state.isPlaying) return // Already playing
     commonControlHandler(togglePlayPauseAction, () => dispatch({ type: "SET_IS_PLAYING_OPTIMISTIC", payload: true }))
   }, [state.isPlaying, commonControlHandler])
 
   const pause = useCallback(() => {
-    if (!state.isPlaying) return; // Already paused
+    if (!state.isPlaying) return // Already paused
     commonControlHandler(togglePlayPauseAction, () => dispatch({ type: "SET_IS_PLAYING_OPTIMISTIC", payload: false }))
   }, [state.isPlaying, commonControlHandler])
-  
+
   const togglePlayPause = useCallback(() => {
     commonControlHandler(togglePlayPauseAction, () => dispatch({ type: "SET_IS_PLAYING_OPTIMISTIC", payload: !state.isPlaying }))
   }, [state.isPlaying, commonControlHandler])
@@ -257,7 +351,10 @@ export function useSpotifyPlayerSync() {
   const seek = useCallback(
     (positionMs: number) => {
       if (state.track && positionMs >= 0 && positionMs <= state.track.durationMs) {
-        commonControlHandler(() => seekToPositionAction(positionMs), () => dispatch({ type: 'SET_PROGRESS_LOCAL', payload: positionMs }))
+        commonControlHandler(
+          () => seekToPositionAction(positionMs),
+          () => dispatch({ type: 'SET_PROGRESS_LOCAL', payload: positionMs })
+        )
       } else {
         toast.error("Invalid seek position.")
       }
@@ -268,9 +365,10 @@ export function useSpotifyPlayerSync() {
   const setVolume = useCallback(
     (volumePercent: number) => {
       const newVolume = Math.max(0, Math.min(100, volumePercent))
-      commonControlHandler(() => setVolumeAction(newVolume))
-      // Optimistic update for volume slider could be dispatching SET_VOLUME here too,
-      // but Spotify API for volume is usually quick. Let sync handle it.
+      commonControlHandler(
+        () => setVolumeAction(newVolume),
+        () => dispatch({ type: 'SET_VOLUME', payload: newVolume })
+      )
     },
     [commonControlHandler]
   )

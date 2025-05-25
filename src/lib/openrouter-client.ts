@@ -15,7 +15,7 @@
  *
  * @notes
  * - The `OPENROUTER_API_KEY` environment variable must be set in `.env.local`.
- * - The default model is set to "openai/gpt-4o", but can be overridden.
+ * - The default model is set to "anthropic/claude-3.7-sonnet", but can be overridden.
  * - Error handling for API calls is included.
  */
 
@@ -23,7 +23,7 @@ import OpenAI from "openai"
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-const DEFAULT_MODEL = "openai/gpt-4o" // As per spec, starting with a high-capability model
+const DEFAULT_MODEL = "anthropic/claude-3.7-sonnet" // Latest Claude model with best performance for music suggestions
 
 let openRouterClientInstance: OpenAI | null = null
 
@@ -89,7 +89,7 @@ export async function callOpenRouter(
     // Re-throw or handle more gracefully based on application needs
     // For now, re-throwing to be caught by server action's error handling.
     if (error instanceof Error) {
-        throw new Error(`OpenRouter API call failed: ${error.message}`);
+      throw new Error(`OpenRouter API call failed: ${error.message}`);
     }
     throw new Error("An unknown error occurred while calling OpenRouter API.");
   }

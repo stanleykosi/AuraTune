@@ -26,6 +26,7 @@
  * - `@/actions/spotify/spotify-playlist-actions`: Server action to search Spotify tracks.
  * - `spotify-web-api-node`: For Spotify track types.
  * - `sonner`: For toast notifications.
+ * - `@/lib/hooks/use-spotify-web-playback`: For Spotify Web Playback SDK integration.
  *
  * @notes
  * - This is a client component (`"use client"`) due to its interactive nature and state management.
@@ -50,6 +51,7 @@ import { searchSpotifyTracksAction } from "@/actions/spotify/spotify-playlist-ac
 import type SpotifyWebApi from "spotify-web-api-node"
 import { Search, Sparkles, XCircle, Loader2, Music2 } from "lucide-react"
 import { toast } from "sonner"
+import { useSpotifyWebPlayback } from "@/lib/hooks/use-spotify-web-playback"
 
 interface SelectedTrackInfo {
   id: string
@@ -60,7 +62,7 @@ interface SelectedTrackInfo {
 
 interface TrackSearchInputProps {
   onGeneratePlaylist: (seedTrackId: string) => Promise<void>
-  isGenerating: boolean // Prop to indicate if generation is in progress
+  isGenerating: boolean
 }
 
 export default function TrackSearchInput({
@@ -68,6 +70,7 @@ export default function TrackSearchInput({
   isGenerating,
 }: TrackSearchInputProps): JSX.Element {
   const { data: session } = useSession()
+  const { isReady, state, play } = useSpotifyWebPlayback()
   const [searchQuery, setSearchQuery] = useState<string>("")
   const [suggestions, setSuggestions] = useState<SpotifyApi.TrackObjectFull[]>([])
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState<boolean>(false)
@@ -181,7 +184,6 @@ export default function TrackSearchInput({
       toast.error("Please select a seed song from the suggestions.", { duration: 3000 })
       return
     }
-    // Call the parent's generation handler
     await onGeneratePlaylist(selectedTrackInfo.id)
   }
 
@@ -233,7 +235,6 @@ export default function TrackSearchInput({
           </div>
         </Card>
       ) : (
-        // Form element is not strictly necessary if button type="button" and onClick handles logic
         <div className="space-y-1">
           <div>
             <Label htmlFor="track-search" className="text-lg font-medium sr-only">

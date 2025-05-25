@@ -122,26 +122,75 @@ export async function togglePlayPauseAction(): Promise<ActionState<{ isPlaying: 
   }
 
   try {
+    // Get current playback state first
     const playbackStateResponse = await spotifyApi.getMyCurrentPlaybackState()
+    const isPlaying = playbackStateResponse.body?.is_playing
+    const currentDevice = playbackStateResponse.body?.device
+    const currentTrack = playbackStateResponse.body?.item
 
-    let newIsPlayingState: boolean;
+    // Get available devices
+    const devicesResponse = await spotifyApi.getMyDevices()
+    const availableDevices = devicesResponse.body.devices
 
-    if (playbackStateResponse.body && playbackStateResponse.body.is_playing) {
-      await spotifyApi.pause()
-      newIsPlayingState = false
-    } else {
-      // If no body or not playing, attempt to play.
-      // This handles cases where playback is paused or no track is active.
-      // Spotify API might require a device_id if no device is active.
-      // The `play()` method can take a device_id if needed, but usually works on the active device.
-      await spotifyApi.play()
-      newIsPlayingState = true
+    if (!availableDevices || availableDevices.length === 0) {
+      return {
+        isSuccess: false,
+        message: "Please open Spotify Web Player (open.spotify.com) and start playing a track first."
+      }
     }
 
-    return {
-      isSuccess: true,
-      message: `Playback ${newIsPlayingState ? "resumed" : "paused"} successfully.`,
-      data: { isPlaying: newIsPlayingState },
+    // Find the best device to use
+    let targetDevice = currentDevice?.is_active ? currentDevice : null
+
+    if (!targetDevice) {
+      targetDevice = availableDevices.find(device => !device.is_restricted) ?? null
+      if (!targetDevice && availableDevices.length > 0) {
+        targetDevice = availableDevices[0]
+      }
+    }
+
+    if (!targetDevice?.id) {
+      return {
+        isSuccess: false,
+        message: "Please open Spotify Web Player (open.spotify.com) and start playing a track first."
+      }
+    }
+
+    // Execute device transfer and playback in parallel if needed
+    const transferPromise = targetDevice && !targetDevice.is_active
+      ? spotifyApi.transferMyPlayback([targetDevice.id], { play: false })
+      : Promise.resolve()
+
+    await transferPromise
+
+    if (isPlaying) {
+      await spotifyApi.pause({ device_id: targetDevice.id })
+      return {
+        isSuccess: true,
+        message: "Playback paused successfully.",
+        data: { isPlaying: false },
+      }
+    } else {
+      if (!currentTrack) {
+        const recentTracks = await spotifyApi.getMyRecentlyPlayedTracks({ limit: 1 })
+        if (!recentTracks.body.items.length) {
+          return {
+            isSuccess: false,
+            message: "No track available to play. Please select a track in Spotify first."
+          }
+        }
+        await spotifyApi.play({
+          device_id: targetDevice.id,
+          uris: [recentTracks.body.items[0].track.uri]
+        })
+      } else {
+        await spotifyApi.play({ device_id: targetDevice.id })
+      }
+      return {
+        isSuccess: true,
+        message: "Playback started successfully.",
+        data: { isPlaying: true },
+      }
     }
   } catch (error: any) {
     return handleSpotifyApiError(error, "togglePlayPauseAction")
@@ -167,7 +216,20 @@ export async function nextTrackAction(): Promise<ActionState<void>> {
   }
 
   try {
-    await spotifyApi.skipToNext()
+    // Get current playback state
+    const playbackState = await spotifyApi.getMyCurrentPlaybackState()
+    const currentDevice = playbackState.body?.device
+    const isPlaying = playbackState.body?.is_playing
+
+    if (!currentDevice?.id) {
+      return { isSuccess: false, message: "No active device found. Please start playback first." }
+    }
+
+    // Execute skip and play in parallel if needed
+    const skipPromise = spotifyApi.skipToNext({ device_id: currentDevice.id })
+    const playPromise = isPlaying ? spotifyApi.play({ device_id: currentDevice.id }) : Promise.resolve()
+
+    await Promise.all([skipPromise, playPromise])
     return { isSuccess: true, message: "Skipped to next track.", data: undefined }
   } catch (error: any) {
     return handleSpotifyApiError(error, "nextTrackAction")
@@ -193,7 +255,20 @@ export async function previousTrackAction(): Promise<ActionState<void>> {
   }
 
   try {
-    await spotifyApi.skipToPrevious()
+    // Get current playback state
+    const playbackState = await spotifyApi.getMyCurrentPlaybackState()
+    const currentDevice = playbackState.body?.device
+    const isPlaying = playbackState.body?.is_playing
+
+    if (!currentDevice?.id) {
+      return { isSuccess: false, message: "No active device found. Please start playback first." }
+    }
+
+    // Execute skip and play in parallel if needed
+    const skipPromise = spotifyApi.skipToPrevious({ device_id: currentDevice.id })
+    const playPromise = isPlaying ? spotifyApi.play({ device_id: currentDevice.id }) : Promise.resolve()
+
+    await Promise.all([skipPromise, playPromise])
     return { isSuccess: true, message: "Skipped to previous track.", data: undefined }
   } catch (error: any) {
     return handleSpotifyApiError(error, "previousTrackAction")

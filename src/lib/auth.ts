@@ -66,6 +66,7 @@ const SPOTIFY_SCOPES = [
   "user-read-playback-state",
   "user-modify-playback-state",
   "user-read-currently-playing",
+  "streaming"  // Required for Web Playback SDK
 ].join(",")
 
 /**

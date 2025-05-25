@@ -1,155 +1,262 @@
 /**
  * @description
  * Client component for the AuraTune application's music player bar.
- * The player bar provides static UI elements for Spotify music playback control,
- * displays current track information (placeholder), and includes controls for volume and playback state.
- * Actual functionality for these controls will be implemented in later phases (Phase 9).
+ * This component integrates with the `useSpotifyPlayerSync` hook to provide
+ * fully functional Spotify music playback control, display current track information,
+ * and manage playback state including volume, shuffle, and repeat modes.
  *
  * Key features:
- * - Declared as a client component (`"use client"`) to eventually handle interactivity and state.
- * - Occupies a fixed area at the bottom of the screen.
- * - Displays placeholders for album art, track name, and artist.
- * - Includes icons for playback controls: Previous, Play/Pause, Next, Shuffle, Repeat.
- * - Includes a progress bar (Slider) and a volume control (Slider).
- * - Styled with Tailwind CSS for a consistent look and feel, inspired by modern music platforms.
+ * - Declared as a client component (`"use client"`).
+ * - Uses `useSpotifyPlayerSync` to manage player state and control functions.
+ * - Displays current track's album art, name, and artist.
+ * - Provides interactive playback controls: Previous, Play/Pause, Next, Shuffle, Repeat.
+ * - Includes a draggable progress bar for seeking and a volume control slider.
+ * - Shows loading indicators during sync/control operations and error messages via toasts.
+ * - Adapts UI based on playback state (e.g., play/pause icon, active device status).
+ * - Styled with Tailwind CSS for a modern, premium aesthetic.
  *
  * @dependencies
- * - `react`: For JSX and component definition.
- * - `lucide-react`: For icons (Play, Pause, SkipForward, SkipBack, Volume2, Shuffle, Repeat, Music2).
+ * - `react`: For JSX, component definition, and state management.
+ * - `lucide-react`: For icons.
  * - `@/components/ui/button`: Shadcn Button component for controls.
  * - `@/components/ui/slider`: Shadcn Slider component for progress and volume.
- * - `@/components/ui/avatar`: Shadcn Avatar component for album art placeholder.
+ * - `@/components/ui/avatar`: Shadcn Avatar component for album art.
+ * - `@/lib/hooks/use-spotify-player-sync`: Custom hook for Spotify player logic.
+ * - `sonner`: For toast notifications (used by the hook).
  *
  * @notes
- * - This implementation focuses on the static UI structure as per Step 3.3.
- * - Functionality will be added in Phase 9, integrating with `useSpotifyPlayerSync` hook and server actions.
- * - The design aims for a premium, modern, and clean aesthetic.
+ * - This component is now fully interactive.
+ * - Error handling for API calls and session issues is managed by the `useSpotifyPlayerSync` hook.
+ * - UI reflects the actual Spotify playback state through polling and optimistic updates.
  */
 "use client"
 
-import React from "react"
+import React, { useState, useEffect, useCallback } from "react"
+import Image from "next/image"
 import {
   Play,
   Pause,
   SkipForward,
   SkipBack,
   Volume2,
+  VolumeX,
   Shuffle,
   Repeat,
+  Repeat1,
   Music2,
-  Maximize2,
+  Loader2,
+  AlertCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useSpotifyPlayerSync } from "@/lib/hooks/use-spotify-player-sync"
+import { useSpotifyWebPlayback } from "@/lib/hooks/use-spotify-web-playback"
+
+/**
+ * Formats milliseconds into a MM:SS string.
+ * @param ms - Duration in milliseconds.
+ * @returns A string formatted as MM:SS.
+ */
+function formatDuration(ms: number | null | undefined): string {
+  if (ms === null || typeof ms === "undefined" || ms < 0) return "0:00"
+  const totalSeconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`
+}
 
 /**
  * Player component.
- * Renders the application's music player bar with static UI elements.
+ * Renders the application's music player bar with dynamic UI and functionality.
  * @returns {JSX.Element} The JSX for the player bar.
  */
 export default function Player(): JSX.Element {
-  // Placeholder state for play/pause toggle - functionality to be added later
-  const [isPlaying, setIsPlaying] = React.useState(false)
-  const [isShuffle, setIsShuffle] = React.useState(false)
-  const [repeatMode, setRepeatMode] = React.useState<"off" | "context" | "track">("off") // off, context, track
+  const {
+    isReady,
+    state,
+    togglePlay,
+    seek,
+    setVolume,
+    nextTrack,
+    previousTrack,
+    setRepeatMode
+  } = useSpotifyWebPlayback()
 
+  const [localVolume, setLocalVolume] = useState(state.volume)
+  const [isSeeking, setIsSeeking] = useState(false)
+  const [localProgress, setLocalProgress] = useState(state.position)
+
+  useEffect(() => {
+    setLocalVolume(state.volume)
+  }, [state.volume])
+
+  useEffect(() => {
+    if (!isSeeking) {
+      setLocalProgress(state.position)
+    }
+  }, [state.position, isSeeking])
+
+  const handleVolumeChange = (value: number[]) => {
+    setLocalVolume(value[0])
+  }
+
+  const handleVolumeCommit = (value: number[]) => {
+    if (isReady) {
+      setVolume(value[0])
+    }
+  }
+
+  const handleProgressChange = (value: number[]) => {
+    if (isReady && state.duration) {
+      setIsSeeking(true)
+      setLocalProgress(value[0])
+    }
+  }
+
+  const handleProgressCommit = (value: number[]) => {
+    if (isReady && state.duration) {
+      seek(value[0])
+      setTimeout(() => setIsSeeking(false), 500)
+    }
+  }
+
+  const isLoading = !isReady
+  const isControlDisabled = isLoading
+
+  const getRepeatIcon = () => {
+    switch (state.repeatMode) {
+      case "track":
+        return <Repeat1 className="h-4 w-4 sm:h-5 sm:w-5" />
+      case "context":
+        return <Repeat className="h-4 w-4 sm:h-5 sm:w-5" />
+      default: // "off"
+        return <Repeat className="h-4 w-4 sm:h-5 sm:w-5" />
+    }
+  }
 
   return (
     <footer className="h-24 bg-card border-t border-border flex items-center justify-between px-4 sm:px-6 shrink-0 text-card-foreground">
       {/* Left Section: Track Info */}
       <div className="flex items-center gap-3 w-1/3 min-w-[200px]">
         <Avatar className="h-14 w-14 rounded-md">
-          {/* Placeholder for Album Art - replace with actual image later */}
-          <AvatarImage src="/placeholder-album-art.png" alt="Album Art" />
-          <AvatarFallback className="rounded-md bg-muted">
-            <Music2 className="h-6 w-6 text-muted-foreground" />
-          </AvatarFallback>
+          {state.currentTrack?.album.images[0]?.url ? (
+            <AvatarImage src={state.currentTrack.album.images[0].url} alt={state.currentTrack.album.name} />
+          ) : (
+            <AvatarFallback className="rounded-md bg-muted">
+              <Music2 className="h-6 w-6 text-muted-foreground" />
+            </AvatarFallback>
+          )}
         </Avatar>
         <div className="flex flex-col overflow-hidden">
-          <p className="text-sm font-semibold truncate" title="Track Name Placeholder">
-            Track Name Placeholder
+          <p className="text-sm font-semibold truncate" title={state.currentTrack?.name || "No track playing"}>
+            {state.currentTrack?.name || "No track playing"}
           </p>
-          <p className="text-xs text-muted-foreground truncate" title="Artist Name Placeholder">
-            Artist Name Placeholder
+          <p className="text-xs text-muted-foreground truncate" title={state.currentTrack?.artists || "Unknown artist"}>
+            {state.currentTrack?.artists || (isReady ? "Unknown artist" : "No active device")}
           </p>
         </div>
       </div>
 
       {/* Center Section: Playback Controls & Progress */}
       <div className="flex flex-col items-center gap-2 w-1/3 max-w-md">
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1 sm:gap-2">
           <Button
             variant="ghost"
             size="icon"
-            className={`hover:bg-primary/10 ${isShuffle ? "text-primary" : "text-muted-foreground hover:text-primary/80"}`}
-            aria-label="Toggle Shuffle"
-            onClick={() => setIsShuffle(!isShuffle)}
+            className="text-foreground hover:bg-primary/10 hover:text-primary/80"
+            aria-label="Previous Track"
+            onClick={previousTrack}
+            disabled={isControlDisabled}
           >
-            <Shuffle className="h-4 w-4 sm:h-5 sm:w-5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="text-foreground hover:bg-primary/10 hover:text-primary/80" aria-label="Previous Track">
             <SkipBack className="h-5 w-5 sm:h-6 sm:w-6" />
           </Button>
+
           <Button
             variant="default"
             size="icon"
-            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
-            aria-label={isPlaying ? "Pause" : "Play"}
-            onClick={() => setIsPlaying(!isPlaying)}
+            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 relative"
+            aria-label={state.isPlaying ? "Pause" : "Play"}
+            onClick={togglePlay}
+            disabled={isControlDisabled}
           >
-            {isPlaying ? (
+            {isLoading ? (
+              <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin" />
+            ) : state.isPlaying ? (
               <Pause className="h-5 w-5 sm:h-6 sm:w-6 fill-current" />
             ) : (
               <Play className="h-5 w-5 sm:h-6 sm:w-6 fill-current" />
             )}
           </Button>
-          <Button variant="ghost" size="icon" className="text-foreground hover:bg-primary/10 hover:text-primary/80" aria-label="Next Track">
-            <SkipForward className="h-5 w-5 sm:h-6 sm:w-6" />
-          </Button>
+
           <Button
             variant="ghost"
             size="icon"
-            className={`hover:bg-primary/10 ${repeatMode !== "off" ? "text-primary" : "text-muted-foreground hover:text-primary/80"}`}
+            className="text-foreground hover:bg-primary/10 hover:text-primary/80"
+            aria-label="Next Track"
+            onClick={nextTrack}
+            disabled={isControlDisabled}
+          >
+            <SkipForward className="h-5 w-5 sm:h-6 sm:w-6" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`hover:bg-primary/10 ${state.repeatMode !== "off" ? "text-primary" : "text-muted-foreground hover:text-primary/80"}`}
             aria-label="Toggle Repeat"
             onClick={() => {
-              if (repeatMode === "off") setRepeatMode("context");
-              else if (repeatMode === "context") setRepeatMode("track");
-              else setRepeatMode("off");
+              if (state.repeatMode === "off") {
+                setRepeatMode("context")
+              } else if (state.repeatMode === "context") {
+                setRepeatMode("track")
+              } else {
+                setRepeatMode("off")
+              }
             }}
+            disabled={isControlDisabled}
           >
-            <Repeat className={`h-4 w-4 sm:h-5 sm:w-5 ${repeatMode === "track" ? "opacity-100" : "opacity-70"}`} />
-            {/* Consider using Repeat1 for track repeat if available or visually distinct */}
+            {getRepeatIcon()}
           </Button>
         </div>
+
         <div className="flex items-center gap-2 w-full max-w-xs sm:max-w-sm md:max-w-md">
-          <span className="text-xs text-muted-foreground">0:00</span>
+          <span className="text-xs text-muted-foreground w-10 text-center">
+            {formatDuration(localProgress)}
+          </span>
           <Slider
-            defaultValue={[33]} // Placeholder value
-            max={100}
-            step={1}
+            value={[localProgress]}
+            max={state.duration || 100}
+            step={1000}
             className="w-full"
             aria-label="Track Progress"
+            onValueChange={handleProgressChange}
+            onValueCommit={handleProgressCommit}
+            disabled={isControlDisabled || !state.duration}
           />
-          <span className="text-xs text-muted-foreground">3:45</span> {/* Placeholder */}
+          <span className="text-xs text-muted-foreground w-10 text-center">
+            {formatDuration(state.duration)}
+          </span>
         </div>
       </div>
 
-      {/* Right Section: Volume & Other Controls (e.g., Fullscreen) */}
+      {/* Right Section: Volume & Device Info */}
       <div className="flex items-center justify-end gap-2 sm:gap-3 w-1/3 min-w-[150px]">
-        <Volume2 className="h-5 w-5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer" />
+        {localVolume === 0 ? (
+          <VolumeX className="h-5 w-5 text-muted-foreground" />
+        ) : (
+          <Volume2 className="h-5 w-5 text-muted-foreground" />
+        )}
         <Slider
-          defaultValue={[50]} // Placeholder value
+          value={[localVolume]}
           max={100}
           step={1}
           className="w-20 sm:w-24"
           aria-label="Volume Control"
+          onValueChange={handleVolumeChange}
+          onValueCommit={handleVolumeCommit}
+          disabled={isControlDisabled}
         />
-        {/* Optional: Fullscreen button or other controls
-        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground" aria-label="Toggle Fullscreen">
-          <Maximize2 className="h-5 w-5" />
-        </Button>
-        */}
       </div>
     </footer>
   )

@@ -33,6 +33,7 @@ export interface PlayerState {
   hasActiveDevice: boolean // True if there's an active Spotify device
   error: string | null // Stores any error messages related to playback
   isSyncing: boolean // True when the player state is being synchronized with Spotify
+  isProcessingControl: boolean // True when a control action is being processed
 }
 
 /**
@@ -52,4 +53,5 @@ export const initialPlayerState: PlayerState = {
   hasActiveDevice: false,
   error: null,
   isSyncing: true, // Start in a syncing state to fetch initial playback status
+  isProcessingControl: false // Start with no control actions processing
 }
