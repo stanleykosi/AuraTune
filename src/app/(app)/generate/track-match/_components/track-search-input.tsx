@@ -3,34 +3,33 @@
  * Client component for handling the seed song search input in the "Track Match" feature.
  * Users can type a song name, and this component provides autocomplete suggestions
  * from Spotify. Once a song is selected, its Spotify ID is stored, and users can
- * trigger playlist generation.
+ * trigger playlist generation via a callback to the parent component.
  *
  * Key features:
  * - Input field for users to type a song name.
  * - Debounced search to fetch autocomplete suggestions from Spotify as the user types.
  * - Displays a list of track suggestions (album art, name, artist).
  * - Allows users to select a track, storing its ID and displaying its details.
- * - Handles loading states and errors during suggestion fetching.
- * - Provides a "Generate Playlist" button, enabled when a track is selected.
+ * - Handles loading states for suggestion fetching.
+ * - Provides a "Generate Playlist" button, enabled when a track is selected and not currently generating.
+ * - Calls `onGeneratePlaylist` prop when the "Generate Playlist" button is clicked.
  *
  * @dependencies
- * - `react`: For component definition, `useState`, `useEffect`, `useRef`.
+ * - `react`: For component definition, `useState`, `useEffect`, `useRef`, `useCallback`.
  * - `next-auth/react`: For `useSession` to access Spotify access token.
  * - `next/image`: For displaying album art.
  * - `lucide-react`: For icons.
  * - `@/components/ui/input`: Shadcn Input component.
  * - `@/components/ui/button`: Shadcn Button component.
  * - `@/components/ui/label`: Shadcn Label component.
- * - `@/components/ui/card`: Shadcn Card for suggestions container.
+ * - `@/components/ui/card`: Shadcn Card for suggestions container and selected track.
  * - `@/actions/spotify/spotify-playlist-actions`: Server action to search Spotify tracks.
  * - `spotify-web-api-node`: For Spotify track types.
  * - `sonner`: For toast notifications.
  *
  * @notes
  * - This is a client component (`"use client"`) due to its interactive nature and state management.
- * - The `handleSubmit` function for playlist generation is currently a placeholder; actual
- *   generation logic will be implemented in Step 8.3/8.4.
- * - The component handles clearing the selected track if the user types again or explicitly clears it.
+ * - The actual playlist generation is initiated by calling the `onGeneratePlaylist` prop.
  */
 "use client"
 
@@ -59,20 +58,31 @@ interface SelectedTrackInfo {
   imageUrl?: string
 }
 
-export default function TrackSearchInput(): JSX.Element {
+interface TrackSearchInputProps {
+  onGeneratePlaylist: (seedTrackId: string) => Promise<void>
+  isGenerating: boolean // Prop to indicate if generation is in progress
+}
+
+export default function TrackSearchInput({
+  onGeneratePlaylist,
+  isGenerating,
+}: TrackSearchInputProps): JSX.Element {
   const { data: session } = useSession()
   const [searchQuery, setSearchQuery] = useState<string>("")
   const [suggestions, setSuggestions] = useState<SpotifyApi.TrackObjectFull[]>([])
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState<boolean>(false)
-  const [selectedTrackInfo, setSelectedTrackInfo] = useState<SelectedTrackInfo | null>(null)
-  const [isGenerating, setIsGenerating] = useState<boolean>(false) // For playlist generation loading state
+  const [selectedTrackInfo, setSelectedTrackInfo] =
+    useState<SelectedTrackInfo | null>(null)
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
 
   // Debounce function
-  const debounce = <F extends (...args: any[]) => any>(func: F, delay: number) => {
+  const debounce = <F extends (...args: any[]) => any>(
+    func: F,
+    delay: number
+  ) => {
     let timeoutId: NodeJS.Timeout
     return (...args: Parameters<F>): Promise<ReturnType<F>> => {
       return new Promise((resolve) => {
@@ -93,7 +103,7 @@ export default function TrackSearchInput(): JSX.Element {
       }
 
       setIsLoadingSuggestions(true)
-      setShowSuggestions(true) // Show loading/empty state immediately
+      setShowSuggestions(true)
 
       const result = await searchSpotifyTracksAction(
         session.accessToken,
@@ -105,7 +115,7 @@ export default function TrackSearchInput(): JSX.Element {
         setSuggestions(result.data)
       } else {
         setSuggestions([])
-        toast.error("Could not fetch suggestions: " + result.message)
+        toast.error("Could not fetch suggestions: " + result.message, { duration: 3000 })
       }
       setIsLoadingSuggestions(false)
     }, 500), // 500ms debounce delay
@@ -114,9 +124,8 @@ export default function TrackSearchInput(): JSX.Element {
 
   useEffect(() => {
     if (searchQuery.trim()) {
-      // If user types after selecting a track, clear the selection
       if (selectedTrackInfo && searchQuery !== selectedTrackInfo.name) {
-        setSelectedTrackInfo(null)
+        setSelectedTrackInfo(null) // Clear selection if user types something different
       }
       fetchSuggestions(searchQuery)
     } else {
@@ -126,7 +135,6 @@ export default function TrackSearchInput(): JSX.Element {
     }
   }, [searchQuery, fetchSuggestions, selectedTrackInfo])
 
-  // Handle clicks outside the input and suggestions list to close suggestions
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -155,42 +163,27 @@ export default function TrackSearchInput(): JSX.Element {
       artist: track.artists.map((artist) => artist.name).join(", "),
       imageUrl: track.album.images?.[0]?.url,
     })
-    setSearchQuery(track.name) // Populate input with selected track name
+    setSearchQuery(track.name)
     setSuggestions([])
     setShowSuggestions(false)
   }
 
   const clearSelectedTrack = () => {
     setSelectedTrackInfo(null)
-    setSearchQuery("") // Optionally clear search query too
+    setSearchQuery("")
     if (inputRef.current) {
       inputRef.current.focus()
     }
   }
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const handleGenerateClick = async () => {
     if (!selectedTrackInfo) {
-      toast.error("Please select a seed song from the suggestions.")
+      toast.error("Please select a seed song from the suggestions.", { duration: 3000 })
       return
     }
-    setIsGenerating(true)
-    // In Step 8.3 & 8.4, this will call the generation server action
-    // using selectedTrackInfo.id
-    console.log(
-      "Submitting for playlist generation with seed track ID:",
-      selectedTrackInfo.id
-    )
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-    setIsGenerating(false)
-    toast.info(
-      `Playlist generation for "${selectedTrackInfo.name}" (ID: ${selectedTrackInfo.id}) would start here.`
-    )
-    // After successful generation/preview, you might want to clear the selection:
-    // clearSelectedTrack();
+    // Call the parent's generation handler
+    await onGeneratePlaylist(selectedTrackInfo.id)
   }
-
 
   if (!session) {
     return (
@@ -203,25 +196,27 @@ export default function TrackSearchInput(): JSX.Element {
   return (
     <div className="space-y-6">
       {selectedTrackInfo ? (
-        <Card className="p-4 " data-testid="selected-track-info">
+        <Card className="p-4" data-testid="selected-track-info">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 overflow-hidden">
               {selectedTrackInfo.imageUrl ? (
                 <Image
                   src={selectedTrackInfo.imageUrl}
                   alt={`Album art for ${selectedTrackInfo.name}`}
                   width={48}
                   height={48}
-                  className="rounded"
+                  className="rounded shrink-0"
                 />
               ) : (
-                <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
+                <div className="w-12 h-12 bg-muted rounded flex items-center justify-center shrink-0">
                   <Music2 className="h-6 w-6 text-muted-foreground" />
                 </div>
               )}
-              <div>
-                <p className="font-semibold text-card-foreground">{selectedTrackInfo.name}</p>
-                <p className="text-sm text-muted-foreground">
+              <div className="overflow-hidden">
+                <p className="font-semibold text-card-foreground truncate" title={selectedTrackInfo.name}>
+                  {selectedTrackInfo.name}
+                </p>
+                <p className="text-sm text-muted-foreground truncate" title={selectedTrackInfo.artist}>
                   {selectedTrackInfo.artist}
                 </p>
               </div>
@@ -231,13 +226,15 @@ export default function TrackSearchInput(): JSX.Element {
               size="icon"
               onClick={clearSelectedTrack}
               aria-label="Clear selected song"
+              disabled={isGenerating}
             >
               <XCircle className="h-5 w-5 text-muted-foreground hover:text-destructive" />
             </Button>
           </div>
         </Card>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-1">
+        // Form element is not strictly necessary if button type="button" and onClick handles logic
+        <div className="space-y-1">
           <div>
             <Label htmlFor="track-search" className="text-lg font-medium sr-only">
               Find a Seed Song
@@ -274,20 +271,27 @@ export default function TrackSearchInput(): JSX.Element {
                     Searching...
                   </div>
                 )}
-                {!isLoadingSuggestions && suggestions.length === 0 && searchQuery.trim() && (
-                  <div className="p-4 text-center text-sm text-muted-foreground">
-                    No tracks found for "{searchQuery}". Try a different search.
-                  </div>
-                )}
+                {!isLoadingSuggestions &&
+                  suggestions.length === 0 &&
+                  searchQuery.trim() && (
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      No tracks found for "{searchQuery}". Try a different
+                      search.
+                    </div>
+                  )}
                 {suggestions.map((track) => (
                   <div
                     key={track.id}
-                    className="flex items-center gap-3 p-3 hover:bg-accent/50 cursor-pointer border-b last:border-b-0"
+                    className="flex items-center gap-3 p-3 hover:bg-accent/10 cursor-pointer border-b last:border-b-0"
                     onClick={() => handleSuggestionClick(track)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSuggestionClick(track)}
+                    onKeyDown={(e) =>
+                      e.key === "Enter" && handleSuggestionClick(track)
+                    }
                     tabIndex={0}
                     role="button"
-                    aria-label={`Select track: ${track.name} by ${track.artists.map(a => a.name).join(', ')}`}
+                    aria-label={`Select track: ${track.name} by ${track.artists
+                      .map((a) => a.name)
+                      .join(", ")}`}
                   >
                     {track.album.images?.[0]?.url ? (
                       <Image
@@ -303,10 +307,18 @@ export default function TrackSearchInput(): JSX.Element {
                       </div>
                     )}
                     <div className="overflow-hidden">
-                      <p className="text-sm font-medium text-foreground truncate" title={track.name}>
+                      <p
+                        className="text-sm font-medium text-foreground truncate"
+                        title={track.name}
+                      >
                         {track.name}
                       </p>
-                      <p className="text-xs text-muted-foreground truncate" title={track.artists.map((a) => a.name).join(", ")}>
+                      <p
+                        className="text-xs text-muted-foreground truncate"
+                        title={track.artists
+                          .map((a) => a.name)
+                          .join(", ")}
+                      >
                         {track.artists.map((a) => a.name).join(", ")}
                       </p>
                     </div>
@@ -315,15 +327,19 @@ export default function TrackSearchInput(): JSX.Element {
               </Card>
             </div>
           )}
-        </form>
+        </div>
       )}
 
       <div className="mt-6">
         <Button
-          onClick={(e) => handleSubmit(e as any)} // handleSubmit expects FormEvent, button onClick gives MouseEvent. Cast for now or refactor.
+          onClick={handleGenerateClick}
           className="w-full sm:w-auto"
           disabled={isGenerating || !selectedTrackInfo}
-          aria-label={selectedTrackInfo ? `Generate playlist based on ${selectedTrackInfo.name}` : "Generate playlist (select a song first)"}
+          aria-label={
+            selectedTrackInfo
+              ? `Generate playlist based on ${selectedTrackInfo.name}`
+              : "Generate playlist (select a song first)"
+          }
         >
           {isGenerating ? (
             <>
