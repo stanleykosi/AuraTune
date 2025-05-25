@@ -8,11 +8,14 @@
  * Key actions:
  * - `generateAndPreviewPlaylistFromTemplateAction`: Orchestrates generating a playlist
  *   preview based on a selected curated template.
+ * - `generateAndPreviewPlaylistFromTrackMatchAction`: Orchestrates generating a playlist
+ *   preview based on a user-provided seed track.
  * - `saveGeneratedPlaylistToSpotifyAction`: Saves a generated and previewed playlist
  *   to the user's Spotify account and records it in the AuraTune database.
  *
  * @dependencies
  * - `next-auth/next`: For `getServerSession` to retrieve user session data.
+ * - `fs/promises` and `path`: For reading prompt files from the filesystem.
  * - `@/lib/auth`: Provides `authOptions` for `getServerSession`.
  * - `@/types`: For `ActionState` and `PlaylistPreviewData` types.
  * - `@/actions/db/curated-templates-actions`: To fetch curated template details.
@@ -20,11 +23,13 @@
  * - `@/actions/db/playlists-actions`: To save playlist metadata to AuraTune's database.
  * - `@/actions/llm/openrouter-actions`: To interact with LLMs for generation tasks.
  * - `@/actions/spotify/spotify-playlist-actions`: To validate tracks against Spotify and manage Spotify playlists.
+ * - `@/actions/spotify/spotify-track-actions`: To fetch details of a specific Spotify track.
  * - `@/db/schema/playlists-schema`: For `playlistGenerationMethodEnum` type.
  *
  * @notes
  * - These are high-level orchestrating actions.
  * - Error handling is crucial at each step of the orchestration.
+ * - System prompts for track match and playlist naming are read from the `src/prompts` directory.
  */
 "use server"
 
@@ -43,11 +48,30 @@ import {
   createSpotifyPlaylistAction,
   addTracksToSpotifyPlaylistAction,
 } from "@/actions/spotify/spotify-playlist-actions"
+import { getSpotifyTrackDetailsAction } from "@/actions/spotify/spotify-track-actions" // New import
 import type SpotifyWebApi from "spotify-web-api-node"
 import { playlistGenerationMethodEnum } from "@/db/schema/playlists-schema"
+import fs from "fs/promises" // For reading prompt files
+import path from "path" // For constructing file paths
 
 const MINIMUM_VALID_TRACKS = 5 // Minimum number of valid tracks required after validation
 const SPOTIFY_TRACK_ADD_LIMIT = 100 // Spotify API limit for adding tracks in one request
+
+/**
+ * Reads a prompt file from the `src/prompts` directory.
+ * @param fileName - The name of the prompt file (e.g., "track-match-base.md").
+ * @returns The content of the file as a string.
+ * @throws If the file cannot be read.
+ */
+async function readPromptFile(fileName: string): Promise<string> {
+  try {
+    const filePath = path.join(process.cwd(), "src", "prompts", fileName)
+    return await fs.readFile(filePath, "utf-8")
+  } catch (error) {
+    console.error(`Error reading prompt file ${fileName}:`, error)
+    throw new Error(`Could not load system prompt: ${fileName}`)
+  }
+}
 
 /**
  * Orchestrates the generation of a playlist preview based on a selected curated template.
@@ -72,7 +96,6 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
   templateId: string
 ): Promise<ActionState<PlaylistPreviewData>> {
   try {
-    // 1. Validate session and inputs
     const session = await getServerSession(authOptions)
     if (!session?.user?.auratuneInternalId || !session?.accessToken || !session?.user?.id) {
       return {
@@ -88,7 +111,6 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
       return { isSuccess: false, message: "Template ID is required." }
     }
 
-    // 2. Retrieve the curated template
     const templateResult = await getCuratedTemplateByIdAction(templateId)
     if (!templateResult.isSuccess || !templateResult.data) {
       return {
@@ -98,8 +120,9 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
       }
     }
     const curatedTemplate = templateResult.data
+    // The system prompt for curated templates comes from the database
+    const systemPromptForTrackGeneration = curatedTemplate.system_prompt
 
-    // 3. Fetch user's default playlist track count
     const settingsResult = await getUserSettingsAction(userId)
     if (!settingsResult.isSuccess || !settingsResult.data) {
       return {
@@ -108,18 +131,21 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
           settingsResult.message || "Failed to retrieve user settings.",
       }
     }
-    const userSettings = settingsResult.data
-    const trackCount = userSettings.default_playlist_track_count
+    const trackCount = settingsResult.data.default_playlist_track_count
 
-    // 4. Call LLM to generate track suggestions (name/artist pairs)
-    const userQueryDataForLLM = {
-      theme: curatedTemplate.name,
-      description: curatedTemplate.description,
-    }
+    // Construct user instruction for LLM track generation
+    const themeInfo = curatedTemplate.name ? `theme: "${curatedTemplate.name}"` : ""
+    const descriptionInfo = curatedTemplate.description
+      ? `description: "${curatedTemplate.description}"`
+      : ""
+    const userInstructionForTrackGeneration = `
+Generate a list of exactly ${trackCount} unique song suggestions that fit the following context: ${[themeInfo, descriptionInfo].filter(Boolean).join(", ")}.
+The suggestions should be suitable for a music playlist.`
+
     const trackSuggestionsResult =
       await generateTracksForPlaylistViaOpenRouterAction(
-        curatedTemplate.system_prompt,
-        userQueryDataForLLM,
+        systemPromptForTrackGeneration,
+        userInstructionForTrackGeneration,
         trackCount
       )
 
@@ -133,7 +159,6 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
     }
     const llmSuggestedTracks = trackSuggestionsResult.data
 
-    // 5. Validate track suggestions against Spotify
     const validationResult = await validateSpotifyTracksAction(userSpotifyAccessToken, llmSuggestedTracks)
 
     if (!validationResult.isSuccess) {
@@ -144,7 +169,6 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
     }
     const validatedTracks: SpotifyApi.TrackObjectFull[] = validationResult.data
 
-    // 6. Check if enough valid tracks were found
     if (validatedTracks.length < MINIMUM_VALID_TRACKS) {
       let message = `Could not find enough valid tracks on Spotify. Only ${validatedTracks.length} tracks were found (minimum ${MINIMUM_VALID_TRACKS} required).`;
       if (validatedTracks.length > 0) {
@@ -158,20 +182,20 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
       };
     }
     if (validatedTracks.length < trackCount) {
-      console.warn(`AuraTune: Requested ${trackCount} tracks, but only ${validatedTracks.length} were validated on Spotify.`);
+      console.warn(`AuraTune: Requested ${trackCount} tracks, but only ${validatedTracks.length} were validated on Spotify for template ${curatedTemplate.name}.`);
     }
 
-    // 7. Calculate total estimated duration of validated tracks
     const estimatedDurationMs = validatedTracks.reduce(
       (total, track) => total + (track.duration_ms || 0),
       0
     )
 
-    // 8. Call LLM to generate playlist name and description using validated tracks
+    const systemPromptForNaming = await readPromptFile("playlist-naming-base.md")
     const playlistMetadataResult =
       await generatePlaylistNameAndDescriptionViaOpenRouterAction(
+        systemPromptForNaming,
         validatedTracks,
-        curatedTemplate.description
+        curatedTemplate.description // Theme description for naming context
       )
 
     if (
@@ -188,7 +212,6 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
     const { name: playlistName, description: playlistDescription } =
       playlistMetadataResult.data
 
-    // 9. Assemble and return PlaylistPreviewData
     const playlistPreview: PlaylistPreviewData = {
       tracks: validatedTracks,
       playlistName: playlistName,
@@ -207,12 +230,163 @@ export async function generateAndPreviewPlaylistFromTemplateAction(
       "Unexpected error in generateAndPreviewPlaylistFromTemplateAction:",
       error
     )
+    const errorMessage = error instanceof Error ? error.message : "An unexpected server error occurred."
     return {
       isSuccess: false,
-      message: "An unexpected server error occurred during playlist generation.",
+      message: `An unexpected server error occurred during playlist generation from template: ${errorMessage}`,
     }
   }
 }
+
+
+/**
+ * Orchestrates the generation of a playlist preview based on a seed track.
+ *
+ * @param seedTrackId - The Spotify ID of the seed track.
+ * @returns A Promise resolving to an `ActionState` containing `PlaylistPreviewData` on success.
+ */
+export async function generateAndPreviewPlaylistFromTrackMatchAction(
+  seedTrackId: string
+): Promise<ActionState<PlaylistPreviewData>> {
+  try {
+    // 1. Validate session and inputs
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.auratuneInternalId || !session?.accessToken || !session?.user?.id) {
+      return {
+        isSuccess: false,
+        message: "User session not found or incomplete. Please log in again.",
+      }
+    }
+    const userId = session.user.auratuneInternalId
+    const userSpotifyAccessToken = session.accessToken
+
+    if (!seedTrackId) {
+      return { isSuccess: false, message: "Seed Track ID is required." }
+    }
+
+    // 2. Fetch details of the seed track from Spotify
+    const seedTrackDetailsResult = await getSpotifyTrackDetailsAction(userSpotifyAccessToken, seedTrackId)
+    if (!seedTrackDetailsResult.isSuccess || !seedTrackDetailsResult.data) {
+      return {
+        isSuccess: false,
+        message: seedTrackDetailsResult.message || "Failed to retrieve seed track details from Spotify.",
+      }
+    }
+    const seedTrack = seedTrackDetailsResult.data
+
+    // 3. Fetch user's default playlist track count
+    const settingsResult = await getUserSettingsAction(userId)
+    if (!settingsResult.isSuccess || !settingsResult.data) {
+      return {
+        isSuccess: false,
+        message: settingsResult.message || "Failed to retrieve user settings.",
+      }
+    }
+    const trackCount = settingsResult.data.default_playlist_track_count
+
+    // 4. Load the system prompt for track matching
+    const systemPromptForTrackGeneration = await readPromptFile("track-match-base.md")
+
+    // 5. Construct user instruction for LLM track generation based on seed track
+    const seedTrackArtists = seedTrack.artists.map(artist => artist.name).join(", ")
+    const userInstructionForTrackGeneration = `
+Generate a list of exactly ${trackCount} unique song suggestions.
+Seed Song: '${seedTrack.name}' by ${seedTrackArtists}.
+Focus on musical similarity to this seed song.`
+
+    // 6. Call LLM to generate track suggestions
+    const trackSuggestionsResult =
+      await generateTracksForPlaylistViaOpenRouterAction(
+        systemPromptForTrackGeneration,
+        userInstructionForTrackGeneration,
+        trackCount
+      )
+
+    if (!trackSuggestionsResult.isSuccess || !trackSuggestionsResult.data) {
+      return {
+        isSuccess: false,
+        message: trackSuggestionsResult.message || "Failed to generate track suggestions from LLM for track match.",
+      }
+    }
+    const llmSuggestedTracks = trackSuggestionsResult.data
+
+    // 7. Validate track suggestions against Spotify
+    const validationResult = await validateSpotifyTracksAction(userSpotifyAccessToken, llmSuggestedTracks)
+    if (!validationResult.isSuccess) {
+      return {
+        isSuccess: false,
+        message: validationResult.message || "Failed to validate tracks on Spotify for track match.",
+      }
+    }
+    const validatedTracks: SpotifyApi.TrackObjectFull[] = validationResult.data
+
+    // 8. Check if enough valid tracks were found
+    if (validatedTracks.length < MINIMUM_VALID_TRACKS) {
+       let message = `Could not find enough valid tracks similar to "${seedTrack.name}". Only ${validatedTracks.length} tracks were found (minimum ${MINIMUM_VALID_TRACKS} required).`;
+      if (validatedTracks.length > 0) {
+        message += " You can try saving these, or regenerate with a different seed song."
+      } else {
+        message += " Please try regenerating or choose a different seed song."
+      }
+      return {
+        isSuccess: false,
+        message: message,
+      };
+    }
+     if (validatedTracks.length < trackCount) {
+      console.warn(`AuraTune: Requested ${trackCount} tracks, but only ${validatedTracks.length} were validated on Spotify for seed track "${seedTrack.name}".`);
+    }
+
+
+    // 9. Calculate total estimated duration
+    const estimatedDurationMs = validatedTracks.reduce(
+      (total, track) => total + (track.duration_ms || 0),
+      0
+    )
+
+    // 10. Call LLM to generate playlist name and description
+    const systemPromptForNaming = await readPromptFile("playlist-naming-base.md")
+    const themeDescriptionForNaming = `A playlist of tracks similar to '${seedTrack.name}' by ${seedTrackArtists}. Focus on capturing the essence of the seed song while creating an engaging listening experience.`
+    const playlistMetadataResult =
+      await generatePlaylistNameAndDescriptionViaOpenRouterAction(
+        systemPromptForNaming,
+        validatedTracks,
+        themeDescriptionForNaming
+      )
+
+    if (!playlistMetadataResult.isSuccess || !playlistMetadataResult.data) {
+      return {
+        isSuccess: false,
+        message: playlistMetadataResult.message || "Failed to generate playlist name and description for track match.",
+      }
+    }
+    const { name: playlistName, description: playlistDescription } = playlistMetadataResult.data
+
+    // 11. Assemble and return PlaylistPreviewData
+    const playlistPreview: PlaylistPreviewData = {
+      tracks: validatedTracks,
+      playlistName: playlistName,
+      playlistDescription: playlistDescription,
+      totalTracks: validatedTracks.length,
+      estimatedDurationMs: estimatedDurationMs,
+    }
+
+    return {
+      isSuccess: true,
+      message: "Track match playlist preview generated successfully.",
+      data: playlistPreview,
+    }
+
+  } catch (error) {
+    console.error("Unexpected error in generateAndPreviewPlaylistFromTrackMatchAction:", error)
+    const errorMessage = error instanceof Error ? error.message : "An unexpected server error occurred."
+    return {
+      isSuccess: false,
+      message: `An unexpected server error occurred during track match generation: ${errorMessage}`,
+    }
+  }
+}
+
 
 /**
  * Defines the payload structure for saving a generated playlist.
@@ -344,9 +518,10 @@ export async function saveGeneratedPlaylistToSpotifyAction(
 
   } catch (error) {
     console.error("Unexpected error in saveGeneratedPlaylistToSpotifyAction:", error)
+    const errorMessage = error instanceof Error ? error.message : "An unexpected server error occurred."
     return {
       isSuccess: false,
-      message: "An unexpected server error occurred while saving the playlist.",
+      message: `An unexpected server error occurred while saving the playlist: ${errorMessage}`,
     }
   }
 }

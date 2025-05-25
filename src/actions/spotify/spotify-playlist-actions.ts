@@ -139,6 +139,33 @@ export async function validateSpotifyTracksAction(
   const validatedTracks: SpotifyApi.TrackObjectFull[] = []
   const foundTrackIds = new Set<string>() // To ensure uniqueness
 
+  // Helper function to add delay between requests
+  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+  // Helper function to retry API calls
+  const retryWithBackoff = async <T>(
+    fn: () => Promise<T>,
+    maxRetries: number = 3,
+    initialDelay: number = 1000
+  ): Promise<T> => {
+    let lastError: any
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return await fn()
+      } catch (error: any) {
+        lastError = error
+        if (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED') {
+          const delayMs = initialDelay * Math.pow(2, i) // Exponential backoff
+          console.log(`Retry attempt ${i + 1}/${maxRetries} after ${delayMs}ms delay`)
+          await delay(delayMs)
+          continue
+        }
+        throw error // If it's not a network error, throw immediately
+      }
+    }
+    throw lastError
+  }
+
   try {
     for (const suggestion of trackSuggestions) {
       if (!suggestion.trackName || !suggestion.artistName) {
@@ -146,21 +173,57 @@ export async function validateSpotifyTracksAction(
         continue
       }
 
-      const cleanTrackName = suggestion.trackName.replace(/["']/g, '');
-      const cleanArtistName = suggestion.artistName.replace(/["']/g, '');
-      const query = `${cleanTrackName} ${cleanArtistName}`;
-      const response = await spotifyApi.searchTracks(query, { limit: 1 })
+      const cleanTrackName = suggestion.trackName.replace(/["']/g, '').trim();
+      const cleanArtistName = suggestion.artistName.replace(/["']/g, '').trim();
+      let found = false
 
-      if (response.body.tracks && response.body.tracks.items.length > 0) {
-        const track = response.body.tracks.items[0]
-        if (track && track.id && !foundTrackIds.has(track.id)) {
-          validatedTracks.push(track)
-          foundTrackIds.add(track.id)
-        }
-      } else {
-        console.log(
-          `Track suggestion not found on Spotify: ${suggestion.trackName} by ${suggestion.artistName}`
+      try {
+        // First try with just the track name
+        const response = await retryWithBackoff(() =>
+          spotifyApi.searchTracks(cleanTrackName, { limit: 5 })
         )
+
+        // If we have results, try to find a match with the artist
+        if (response.body.tracks && response.body.tracks.items.length > 0) {
+          for (const track of response.body.tracks.items) {
+            const trackArtists = track.artists.map(a => a.name.toLowerCase())
+            if (trackArtists.some(artist => artist.includes(cleanArtistName.toLowerCase()))) {
+              if (track.id && !foundTrackIds.has(track.id)) {
+                validatedTracks.push(track)
+                foundTrackIds.add(track.id)
+                found = true
+                break
+              }
+            }
+          }
+        }
+
+        // If not found with just track name, try with both track name and artist
+        if (!found) {
+          const query = `${cleanTrackName} ${cleanArtistName}`
+          const response = await retryWithBackoff(() =>
+            spotifyApi.searchTracks(query, { limit: 1 })
+          )
+
+          if (response.body.tracks && response.body.tracks.items.length > 0) {
+            const track = response.body.tracks.items[0]
+            if (track && track.id && !foundTrackIds.has(track.id)) {
+              validatedTracks.push(track)
+              foundTrackIds.add(track.id)
+            }
+          } else {
+            console.log(
+              `Track suggestion not found on Spotify: ${suggestion.trackName} by ${suggestion.artistName}`
+            )
+          }
+        }
+
+        // Add a small delay between processing each track to avoid rate limiting
+        await delay(200)
+      } catch (error: any) {
+        console.error(`Error processing track "${cleanTrackName}" by "${cleanArtistName}":`, error)
+        // Continue with next track instead of failing the entire validation
+        continue
       }
     }
 

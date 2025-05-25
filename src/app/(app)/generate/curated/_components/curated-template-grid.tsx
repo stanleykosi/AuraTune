@@ -33,25 +33,30 @@
  */
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useCallback } from "react"
 import CuratedTemplateCard from "./curated-template-card"
 import { SelectCuratedTemplate } from "@/db/schema/curated-templates-schema"
 import { playlistGenerationMethodEnum } from "@/db/schema/playlists-schema"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Info, Loader2, AlertTriangle, ExternalLink } from "lucide-react"
+import { Info, Loader2, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 import {
   generateAndPreviewPlaylistFromTemplateAction,
   saveGeneratedPlaylistToSpotifyAction,
   PlaylistSavePayload,
-} from "@/app/(app)/generate/generation-actions"
+} from "@/actions/generation/generation-actions" // Updated import path
 import { PlaylistPreviewData } from "@/types"
 import PlaylistPreviewModal from "@/components/shared/playlist-preview-modal"
 
 interface CuratedTemplateGridProps {
   templates: SelectCuratedTemplate[]
 }
+
+// Add these constants at the top of the file after imports
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 1000; // 1 second
+const MAX_RETRY_DELAY = 10000; // 10 seconds
 
 export default function CuratedTemplateGrid({
   templates,
@@ -66,47 +71,96 @@ export default function CuratedTemplateGrid({
     useState<PlaylistPreviewData | null>(null)
   const [generationError, setGenerationError] = useState<string | null>(null)
 
-  const handleTemplateSelect = async (templateId: string) => {
-    setIsLoadingGeneration(true)
-    setSelectedTemplateId(templateId)
-    setGenerationError(null)
-    setPlaylistPreviewData(null)
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+  const handleTemplateSelect = async (templateId: string, retryCount = 0) => {
+    setIsLoadingGeneration(true);
+    setSelectedTemplateId(templateId);
+    setGenerationError(null);
+    setPlaylistPreviewData(null);
 
     const loadingToastId = toast.loading("Generating your playlist preview...", {
       description: "Please wait while AuraTune crafts your unique playlist.",
     });
 
     try {
-      const result =
-        await generateAndPreviewPlaylistFromTemplateAction(templateId)
+      const result = await generateAndPreviewPlaylistFromTemplateAction(templateId);
 
       if (result.isSuccess && result.data) {
-        setPlaylistPreviewData(result.data)
-        setIsPreviewModalOpen(true)
-        toast.success("Playlist preview ready!", { id: loadingToastId, duration: 3000 })
+        setPlaylistPreviewData(result.data);
+        setIsPreviewModalOpen(true);
+        toast.success("Playlist preview ready!", { id: loadingToastId, duration: 3000 });
       } else {
-        setGenerationError(
-          result.message || "Failed to generate playlist preview."
-        )
-        toast.error(
-          result.message || "Oops! Something went wrong.",
-          { id: loadingToastId, duration: 5000, description: "Please try again or select a different template." }
-        )
+        const isTimeoutError = result.message?.toLowerCase().includes('timeout') ||
+          result.message?.toLowerCase().includes('etimedout');
+
+        if (isTimeoutError && retryCount < MAX_RETRIES) {
+          const retryDelay = Math.min(INITIAL_RETRY_DELAY * Math.pow(2, retryCount), MAX_RETRY_DELAY);
+
+          toast.error(
+            "Taking longer than expected...",
+            {
+              id: loadingToastId,
+              duration: retryDelay,
+              description: `Retrying in ${retryDelay / 1000} seconds... (Attempt ${retryCount + 1}/${MAX_RETRIES})`
+            }
+          );
+
+          await sleep(retryDelay);
+          return handleTemplateSelect(templateId, retryCount + 1);
+        } else {
+          setGenerationError(
+            result.message || "Failed to generate playlist preview."
+          );
+          toast.error(
+            "Couldn't generate playlist",
+            {
+              id: loadingToastId,
+              duration: 5000,
+              description: retryCount >= MAX_RETRIES
+                ? "Maximum retry attempts reached. Please try again later."
+                : "Please try again or select a different template."
+            }
+          );
+        }
       }
     } catch (error) {
-      console.error("Error calling generation action:", error)
-      const errorMessage =
-        error instanceof Error ? error.message : "An unexpected error occurred."
-      setGenerationError(errorMessage)
-      toast.error(
-        "Generation Failed",
-        { id: loadingToastId, duration: 5000, description: errorMessage }
-      )
+      console.error("Error calling generation action:", error);
+      const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
+      const isTimeoutError = errorMessage.toLowerCase().includes('timeout') ||
+        errorMessage.toLowerCase().includes('etimedout');
+
+      if (isTimeoutError && retryCount < MAX_RETRIES) {
+        const retryDelay = Math.min(INITIAL_RETRY_DELAY * Math.pow(2, retryCount), MAX_RETRY_DELAY);
+
+        toast.error(
+          "Taking longer than expected...",
+          {
+            id: loadingToastId,
+            duration: retryDelay,
+            description: `Retrying in ${retryDelay / 1000} seconds... (Attempt ${retryCount + 1}/${MAX_RETRIES})`
+          }
+        );
+
+        await sleep(retryDelay);
+        return handleTemplateSelect(templateId, retryCount + 1);
+      } else {
+        setGenerationError(errorMessage);
+        toast.error(
+          "Generation Failed",
+          {
+            id: loadingToastId,
+            duration: 5000,
+            description: retryCount >= MAX_RETRIES
+              ? "Maximum retry attempts reached. Please try again later."
+              : "Please try again or select a different template."
+          }
+        );
+      }
     } finally {
-      setIsLoadingGeneration(false)
-      // Keep selectedTemplateId until modal is closed or another action starts
+      setIsLoadingGeneration(false);
     }
-  }
+  };
 
   const handleSavePlaylist = async (editedName: string, editedDescription: string) => {
     if (!playlistPreviewData || !selectedTemplateId) {
@@ -201,10 +255,10 @@ export default function CuratedTemplateGrid({
       )}
 
       {isLoadingGeneration && !selectedTemplateId && ( // Global loading if no specific card is targeted yet
-         <div className="flex items-center justify-center space-x-2 py-4">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            <p className="text-muted-foreground">Loading templates...</p>
-         </div>
+        <div className="flex items-center justify-center space-x-2 py-4">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading templates...</p>
+        </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -223,9 +277,9 @@ export default function CuratedTemplateGrid({
           isOpen={isPreviewModalOpen}
           onOpenChange={(open) => {
             if (!open) { // If modal is closed externally (e.g. ESC key)
-                handleDiscardPlaylist();
+              handleDiscardPlaylist();
             } else {
-                setIsPreviewModalOpen(open);
+              setIsPreviewModalOpen(open);
             }
           }}
           playlistData={playlistPreviewData}

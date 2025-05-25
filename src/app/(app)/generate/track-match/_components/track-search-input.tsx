@@ -257,7 +257,7 @@ export default function TrackSearchInput(): JSX.Element {
                 autoComplete="off"
               />
               {isLoadingSuggestions && (
-                 <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground animate-spin" />
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground animate-spin" />
               )}
             </div>
           </div>

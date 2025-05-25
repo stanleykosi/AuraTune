@@ -6,18 +6,20 @@
  *
  * Key features:
  * - `generateTracksForPlaylistViaOpenRouterAction`: Action to generate a list of track suggestions
- *   based on a system prompt, user query, and desired track count by calling the OpenRouter API.
+ *   based on a system prompt, user instruction, and desired track count by calling the OpenRouter API.
  * - `generatePlaylistNameAndDescriptionViaOpenRouterAction`: Action to generate a playlist name
- *   and description based on a list of tracks and a theme.
+ *   and description based on a system prompt, a list of tracks, and a theme.
  *
  * @dependencies
  * - `@/types`: For `ActionState` and `OpenRouterTrackSuggestion` types.
  * - `@/lib/openrouter-client`: For making API calls to OpenRouter.
  * - `spotify-web-api-node`: For `SpotifyApi.TrackObjectFull` type.
+ * - `zod`: For schema validation of LLM responses.
  *
  * @notes
  * - All actions are server-side only (`"use server"`).
  * - Robust error handling and input validation are included.
+ * - LLM responses are parsed and validated against Zod schemas.
  */
 "use server"
 
@@ -27,13 +29,24 @@ import type SpotifyWebApi from "spotify-web-api-node"
 import { z } from "zod"
 
 /**
+ * Zod schema for validating a single track suggestion from the LLM.
+ */
+const TrackSuggestionSchema = z.object({
+  trackName: z.string().min(1, "Track name cannot be empty."),
+  artistName: z.string().min(1, "Artist name cannot be empty."),
+});
+
+/**
+ * Zod schema for validating an array of track suggestions from the LLM.
+ */
+const TrackSuggestionsArraySchema = z.array(TrackSuggestionSchema);
+
+
+/**
  * Generates a list of track suggestions for a playlist using the OpenRouter API.
- * This action takes a system prompt, user-specific query data (theme, description), and a desired track count,
- * then interacts with an LLM to get track recommendations.
  *
- * @param systemPrompt - The system prompt to guide the LLM (e.g., personality, output format). This typically comes from `curated_templates.system_prompt`.
- * @param userQueryData - An object containing user-specific context or query details.
- *                        For curated templates, this includes `theme` and `description`.
+ * @param systemPrompt - The system prompt to guide the LLM (e.g., personality, output format).
+ * @param userInstruction - The specific instruction for the user message (e.g., "Generate based on theme X" or "Generate based on seed song Y").
  * @param trackCount - The desired number of tracks for the playlist.
  * @returns A Promise resolving to an `ActionState`.
  *          On success, `data` contains an array of `OpenRouterTrackSuggestion` objects.
@@ -41,34 +54,33 @@ import { z } from "zod"
  */
 export async function generateTracksForPlaylistViaOpenRouterAction(
   systemPrompt: string,
-  userQueryData: { theme?: string; description?: string;[key: string]: any },
+  userInstruction: string, // Changed from userQueryData
   trackCount: number
 ): Promise<ActionState<OpenRouterTrackSuggestion[]>> {
-  // Basic input validation
   if (!systemPrompt) {
     return {
       isSuccess: false,
       message: "System prompt is required for track generation.",
     }
   }
+  if (!userInstruction) {
+    return {
+      isSuccess: false,
+      message: "User instruction is required for track generation.",
+    }
+  }
   if (trackCount <= 0 || trackCount > 100) {
-    // Assuming a reasonable limit for track count
     return {
       isSuccess: false,
       message: "Track count must be a positive number, typically up to 100.",
     }
   }
 
-  // Construct the user message for the LLM
-  const themeInfo = userQueryData.theme ? `theme: "${userQueryData.theme}"` : ""
-  const descriptionInfo = userQueryData.description
-    ? `description: "${userQueryData.description}"`
-    : ""
-  const contextString = [themeInfo, descriptionInfo].filter(Boolean).join(", ")
-
+  // Construct the user message for the LLM.
+  // The `userInstruction` provides the core task details.
+  // The rest of the message guides the LLM on the expected output format.
   const userMessage = `
-Generate a list of exactly ${trackCount} unique song suggestions that fit the following context: ${contextString}.
-The suggestions should be suitable for a music playlist.
+${userInstruction}
 
 Your response **MUST** be a valid JSON array of objects. Each object in the array must represent a single track and contain exactly two string keys: "trackName" and "artistName".
 Do not include any other text, explanations, or introductory/concluding remarks outside of the JSON array.
@@ -91,63 +103,44 @@ Ensure the track names and artist names are accurate.
         message: "LLM returned an empty response.",
       }
     }
-
-    // Attempt to parse the LLM response string as JSON
+    
     let parsedResponse: any
     try {
-      // Clean the response string by removing markdown code block formatting
       const cleanedLlmResponseString = llmResponseString.replace(/^```json\s*|```$/g, '').trim();
       parsedResponse = JSON.parse(cleanedLlmResponseString)
     } catch (parseError) {
-      console.error("Failed to parse LLM response as JSON:", parseError)
-      console.error("LLM Response String for track generation:", llmResponseString) // Log the problematic string
+      console.error("Failed to parse LLM response as JSON for track generation:", parseError)
+      console.error("LLM Response String (track generation):", llmResponseString)
       return {
         isSuccess: false,
-        message:
-          "Failed to parse LLM response for track generation. The format was not valid JSON.",
+        message: "Failed to parse LLM response for track generation. The format was not valid JSON.",
       }
     }
 
-    // Validate that the parsed response is an array
-    if (!Array.isArray(parsedResponse)) {
-      console.error("Parsed LLM response for track generation is not an array:", parsedResponse)
-      return {
-        isSuccess: false,
-        message:
-          "LLM response for track generation was valid JSON but not an array of track suggestions as expected.",
-      }
-    }
-
-    const trackSuggestionSchema = z.object({
-      trackName: z.string().min(1, "Track name cannot be empty."),
-      artistName: z.string().min(1, "Artist name cannot be empty."),
-    });
-
-    const validationResult = z.array(trackSuggestionSchema).safeParse(parsedResponse);
+    const validationResult = TrackSuggestionsArraySchema.safeParse(parsedResponse);
 
     if (!validationResult.success) {
-      console.error("LLM response for track generation failed schema validation:", validationResult.error.issues);
+      console.error("LLM response for track generation failed schema validation:", validationResult.error.format());
+      console.error("Parsed LLM Response (track generation):", parsedResponse);
       return {
         isSuccess: false,
-        message: "LLM response for track generation has invalid structure for one or more items.",
+        message: "LLM response for track generation has invalid structure for one or more items. " + validationResult.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; '),
       };
     }
 
     const trackSuggestions: OpenRouterTrackSuggestion[] = validationResult.data;
 
-
-    // Check if the number of tracks matches the request, though LLMs might not always be exact.
-    // This is more of a soft check or for logging.
-    if (trackSuggestions.length !== trackCount) {
-      console.warn(
-        `LLM generated ${trackSuggestions.length} tracks, but ${trackCount} were requested.`
-      )
-    }
     if (trackSuggestions.length === 0 && trackCount > 0) {
       return {
         isSuccess: false,
         message: "LLM generated an empty list of tracks despite being asked for more."
       }
+    }
+    // Soft warning if LLM doesn't meet exact track count
+    if (trackSuggestions.length !== trackCount) {
+       console.warn(
+        `LLM generated ${trackSuggestions.length} tracks, but ${trackCount} were requested. Proceeding with available tracks.`
+      );
     }
 
 
@@ -170,28 +163,36 @@ Ensure the track names and artist names are accurate.
   }
 }
 
+/**
+ * Zod schema for validating the playlist name and description from the LLM.
+ */
 const PlaylistNameAndDescriptionSchema = z.object({
-  name: z.string().min(1, "Playlist name cannot be empty.").max(100, "Playlist name is too long."),
-  description: z.string().max(300, "Playlist description is too long.").optional().default(""), // Allow empty description
+  name: z.string().min(1, "Playlist name cannot be empty.").max(100, "Playlist name is too long (max 100 chars)."),
+  description: z.string().max(300, "Playlist description is too long (max 300 chars).").optional().default(""),
 });
 
 
 /**
  * Generates a playlist name and description using the OpenRouter API.
- * This action takes a list of validated Spotify tracks and a theme description,
- * then interacts with an LLM to create a suitable name and description for the playlist.
  *
- * @param tracks - An array of `SpotifyApi.TrackObjectFull` objects.
- * @param themeDescription - A string describing the theme or mood of the playlist (e.g., from curated template).
+ * @param systemPrompt - The system prompt to guide the LLM (e.g., personality, output format for naming).
+ * @param tracks - An array of `SpotifyApi.TrackObjectFull` objects that form the playlist.
+ * @param themeDescription - A string describing the theme or mood of the playlist.
  * @returns A Promise resolving to an `ActionState`.
  *          On success, `data` contains an object with `name` (string) and `description` (string).
  *          On failure, `isSuccess` is false and `message` contains error details.
  */
 export async function generatePlaylistNameAndDescriptionViaOpenRouterAction(
+  systemPrompt: string, // Added systemPrompt parameter
   tracks: SpotifyApi.TrackObjectFull[],
   themeDescription: string
 ): Promise<ActionState<{ name: string; description: string }>> {
-  // Basic input validation
+  if (!systemPrompt) {
+    return {
+      isSuccess: false,
+      message: "System prompt is required for playlist name/description generation.",
+    }
+  }
   if (!tracks || tracks.length === 0) {
     return {
       isSuccess: false,
@@ -205,33 +206,15 @@ export async function generatePlaylistNameAndDescriptionViaOpenRouterAction(
     }
   }
 
-  // Construct the track list string for the prompt
   const trackListString = tracks
-    .slice(0, 10) // Limit to first 10 tracks to keep prompt concise
+    .slice(0, 10)
     .map(
       (track) =>
         `- "${track.name}" by ${track.artists.map((a) => a.name).join(", ")}`
     )
     .join("\n")
 
-  // System prompt based on `playlist-naming-base.md`
-  const systemPromptForNaming = `
-You are AuraTune, a highly creative AI assistant specializing in crafting compelling playlist names and descriptions for music enthusiasts.
-Your goal is to generate a unique, catchy, and relevant name, along with a short, engaging description (1-2 sentences maximum) for a music playlist based on a provided list of tracks and a theme.
-
-Your response **MUST** be a valid JSON object. This JSON object must contain exactly two string keys:
-- "name": The generated playlist name (string, max 100 characters).
-- "description": The generated playlist description (string, max 300 characters, can be empty).
-
-Do **NOT** include any other text, explanations, introductory remarks, or concluding remarks outside of this JSON object. Your entire response should be only the JSON object itself.
-
-Example of the required JSON output format:
-{
-  "name": "Midnight Drive Grooves",
-  "description": "A curated selection of deep house and downtempo tracks perfect for a late-night drive through the city. Let the rhythm guide your journey."
-}
-`
-
+  // The user message now focuses on providing data, assuming the system prompt handles instructions.
   const userMessageForNaming = `
 Here are some tracks from the playlist:
 ${trackListString}
@@ -240,12 +223,12 @@ ${trackListString}
 The overall theme/mood for this playlist is: "${themeDescription}".
 
 Please generate a suitable playlist name and a short description based on these tracks and the theme.
-Remember to provide your response strictly in the specified JSON format.
+Remember to provide your response strictly in the specified JSON format as outlined in the system prompt.
 `
 
   try {
     const llmResponseString = await callOpenRouter(
-      systemPromptForNaming,
+      systemPrompt, // Use the passed-in system prompt
       userMessageForNaming
     )
 
@@ -256,33 +239,27 @@ Remember to provide your response strictly in the specified JSON format.
       }
     }
 
-    // Attempt to parse the LLM response string as JSON
     let parsedResponse: any
     try {
-      // Clean the response string by removing markdown code block formatting
       const cleanedLlmResponseString = llmResponseString.replace(/^```json\s*|```$/g, '').trim();
       parsedResponse = JSON.parse(cleanedLlmResponseString)
     } catch (parseError) {
-      console.error(
-        "Failed to parse LLM response for name/description as JSON:",
-        parseError
-      )
-      console.error("LLM Response String for name/description:", llmResponseString)
+      console.error("Failed to parse LLM response for name/description as JSON:", parseError)
+      console.error("LLM Response String (name/description):", llmResponseString)
       return {
         isSuccess: false,
-        message:
-          "Failed to parse LLM response for name/description. The format was not valid JSON.",
+        message: "Failed to parse LLM response for name/description. The format was not valid JSON.",
       }
     }
 
     const validationResult = PlaylistNameAndDescriptionSchema.safeParse(parsedResponse);
 
     if (!validationResult.success) {
-      console.error("LLM response for name/description failed schema validation:", validationResult.error.issues);
-      console.error("Parsed LLM Response for name/description:", parsedResponse);
+      console.error("LLM response for name/description failed schema validation:", validationResult.error.format());
+      console.error("Parsed LLM Response (name/description):", parsedResponse);
       return {
         isSuccess: false,
-        message: "LLM response for name/description has invalid structure or content.",
+        message: "LLM response for name/description has invalid structure or content. " + validationResult.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; '),
       };
     }
 
