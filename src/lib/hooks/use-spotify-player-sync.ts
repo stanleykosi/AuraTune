@@ -1,0 +1,305 @@
+/**
+ * @description
+ * Custom React hook for managing and synchronizing Spotify playback state.
+ * It polls the backend for the current playback state, provides functions
+ * to control playback (play, pause, skip, volume, etc.), and simulates
+ * local progress updates for a smoother UI experience.
+ *
+ * Key features:
+ * - Manages player state (track, playing status, progress, volume, device).
+ * - Periodically syncs with Spotify via server actions.
+ * - Provides control functions that call Spotify API through server actions.
+ * - Simulates local progress bar updates.
+ * - Handles session state and error notifications.
+ *
+ * @dependencies
+ * - `react`: For hook essentials (`useState`, `useEffect`, `useCallback`, `useReducer`).
+ * - `next-auth/react`: For `useSession` to check authentication status.
+ * - `sonner`: For displaying toast notifications.
+ * - `@/actions/spotify/spotify-playback-actions`: Server actions for Spotify control.
+ * - `@/types/player-types`: For `PlayerState`, `PlayerTrackInfo`, `initialPlayerState`.
+ * - `spotify-web-api-node`: For Spotify API response types.
+ */
+"use client"
+
+import { useEffect, useCallback, useReducer } from "react"
+import { useSession } from "next-auth/react"
+import { toast } from "sonner"
+
+import {
+  getCurrentPlaybackStateAction,
+  togglePlayPauseAction,
+  nextTrackAction,
+  previousTrackAction,
+  seekToPositionAction,
+  setVolumeAction,
+  toggleShuffleAction,
+  setRepeatModeAction,
+} from "@/actions/spotify/spotify-playback-actions"
+
+import {
+  PlayerState,
+  PlayerTrackInfo,
+  initialPlayerState,
+} from "@/types/player-types"
+import type SpotifyWebApi from "spotify-web-api-node"
+
+// Constants for polling and progress updates
+const POLLING_INTERVAL = 5000 // Sync with Spotify every 5 seconds
+const PROGRESS_UPDATE_INTERVAL = 1000 // Update local progress every 1 second
+
+// Action types for the player state reducer
+type PlayerReducerAction =
+  | { type: "SET_STATE_FROM_API"; payload: SpotifyApi.CurrentPlaybackResponse | null }
+  | { type: "SET_IS_PLAYING_OPTIMISTIC"; payload: boolean }
+  | { type: "SET_PROGRESS_LOCAL"; payload: number }
+  | { type: "SET_ERROR"; payload: string | null }
+  | { type: "SET_SYNCING"; payload: boolean }
+  | { type: "RESET_TO_INITIAL" }
+
+// Reducer function to manage player state
+const playerReducer = (state: PlayerState, action: PlayerReducerAction): PlayerState => {
+  switch (action.type) {
+    case "SET_STATE_FROM_API": {
+      const apiState = action.payload
+      if (!apiState || !apiState.device || apiState.device.id === null) {
+        // No active device, or Spotify returned minimal/null state
+        return {
+          ...initialPlayerState, // Reset to a known inactive state
+          volumePercent: apiState?.device?.volume_percent ?? state.volumePercent, // Preserve volume if possible
+          hasActiveDevice: false,
+          error: state.error, // Preserve existing error unless it's specifically cleared
+          isSyncing: false,
+        }
+      }
+
+      const item = apiState.item as SpotifyApi.TrackObjectFull | null
+      let trackInfo: PlayerTrackInfo | null = null
+      if (item && apiState.currently_playing_type === "track") {
+        trackInfo = {
+          id: item.id,
+          uri: item.uri,
+          name: item.name,
+          artists: item.artists.map((a) => a.name).join(", "),
+          albumName: item.album.name,
+          albumArtUrl: item.album.images?.[0]?.url,
+          durationMs: item.duration_ms,
+        }
+      }
+
+      return {
+        ...state,
+        track: trackInfo,
+        isPlaying: apiState.is_playing,
+        progressMs: apiState.progress_ms,
+        volumePercent: apiState.device.volume_percent ?? state.volumePercent,
+        shuffleState: apiState.shuffle_state,
+        repeatState: apiState.repeat_state as "track" | "context" | "off",
+        deviceId: apiState.device.id,
+        deviceName: apiState.device.name,
+        deviceType: apiState.device.type,
+        hasActiveDevice: true,
+        error: null, // Clear previous errors on successful sync
+        isSyncing: false,
+      }
+    }
+    case "SET_IS_PLAYING_OPTIMISTIC":
+      return { ...state, isPlaying: action.payload }
+    case "SET_PROGRESS_LOCAL": {
+      // Ensure progress does not exceed duration or become negative
+      const newProgress = state.track?.durationMs
+        ? Math.max(0, Math.min(action.payload, state.track.durationMs))
+        : Math.max(0, action.payload)
+      return { ...state, progressMs: newProgress }
+    }
+    case "SET_ERROR":
+      return { ...state, error: action.payload, isSyncing: false }
+    case "SET_SYNCING":
+      return { ...state, isSyncing: action.payload }
+    case "RESET_TO_INITIAL":
+      return { ...initialPlayerState, isSyncing: false }
+    default:
+      return state
+  }
+}
+
+/**
+ * Custom hook to synchronize and control Spotify playback.
+ * @returns An object containing the current player state and control functions.
+ */
+export function useSpotifyPlayerSync() {
+  const [state, dispatch] = useReducer(playerReducer, initialPlayerState)
+  const { data: session, status: sessionStatus } = useSession()
+
+  // Function to fetch current playback state from Spotify
+  const syncPlaybackState = useCallback(
+    async (isTriggeredByControl: boolean = false) => {
+      if (sessionStatus !== "authenticated") {
+        dispatch({ type: "RESET_TO_INITIAL" }) // Reset if session is lost
+        dispatch({ type: "SET_ERROR", payload: "User not authenticated." })
+        return
+      }
+
+      // Set syncing state, especially if triggered by a control action
+      // or if it's the first sync. Avoid rapid toggling for background polls.
+      if (isTriggeredByControl || state.isSyncing) {
+         dispatch({ type: "SET_SYNCING", payload: true })
+      }
+
+
+      const result = await getCurrentPlaybackStateAction()
+
+      if (result.isSuccess) {
+        dispatch({ type: "SET_STATE_FROM_API", payload: result.data })
+      } else {
+        dispatch({ type: "SET_ERROR", payload: result.message })
+        // Specific handling if no device is found based on message content
+        if (result.message.includes("No active Spotify device found")) {
+          dispatch({ type: "SET_STATE_FROM_API", payload: null }) // This will reset to an inactive state
+        }
+      }
+    },
+    [sessionStatus, state.isSyncing] // dispatch is stable
+  )
+
+  // Effect for initial sync and periodic polling
+  useEffect(() => {
+    if (sessionStatus === "authenticated") {
+      syncPlaybackState(true) // Initial sync, consider it like a control trigger for loading state
+      const intervalId = setInterval(
+        () => syncPlaybackState(false), // Subsequent polls are background
+        POLLING_INTERVAL
+      )
+      return () => clearInterval(intervalId)
+    } else if (sessionStatus === "unauthenticated" && !state.isSyncing) {
+      // If user logs out and we are not already resetting
+      dispatch({ type: "RESET_TO_INITIAL" })
+      dispatch({ type: "SET_ERROR", payload: "User logged out." })
+    }
+  }, [sessionStatus, syncPlaybackState, state.isSyncing])
+
+  // Effect for local progress simulation
+  useEffect(() => {
+    let progressInterval: NodeJS.Timeout | undefined
+    if (state.isPlaying && state.track && state.progressMs !== null && state.track.durationMs > 0) {
+      progressInterval = setInterval(() => {
+        const newProgress = (state.progressMs ?? 0) + PROGRESS_UPDATE_INTERVAL
+        if (newProgress <= state.track!.durationMs) {
+          dispatch({ type: "SET_PROGRESS_LOCAL", payload: newProgress })
+        } else {
+          // Progress exceeded duration, likely track ended. Polling will catch the new state.
+          // For now, stop local increment. Could also trigger an immediate sync.
+          dispatch({ type: "SET_PROGRESS_LOCAL", payload: state.track!.durationMs })
+          clearInterval(progressInterval!)
+          // Consider an immediate sync if track ends locally before poll picks it up
+          // syncPlaybackState(true); 
+        }
+      }, PROGRESS_UPDATE_INTERVAL)
+    }
+    return () => {
+      if (progressInterval) clearInterval(progressInterval)
+    }
+  }, [state.isPlaying, state.progressMs, state.track])
+
+  // --- Playback Control Functions ---
+
+  const commonControlHandler = async (
+    action: () => Promise<any>, // The server action to call
+    optimisticUpdate?: () => void // Optional optimistic UI update
+  ) => {
+    if (sessionStatus !== "authenticated") {
+      toast.error("You must be logged in to control playback.")
+      return
+    }
+    if (!state.hasActiveDevice && !action.name.includes("togglePlayPauseAction")) { 
+      // Allow play/pause attempt even without active device, Spotify might pick one.
+      // For other actions like next/prev, an active device is more critical.
+      toast.error("No active Spotify device. Please start playback on a device.")
+      return;
+    }
+
+    dispatch({ type: "SET_SYNCING", payload: true })
+    if (optimisticUpdate) optimisticUpdate();
+
+    const result = await action()
+
+    if (result.isSuccess) {
+      if (result.message) toast.success(result.message, { duration: 2000 })
+    } else {
+      if (result.message) toast.error(result.message)
+      dispatch({ type: "SET_ERROR", payload: result.message })
+    }
+    await syncPlaybackState(true) // Force sync after control action
+  }
+
+  const play = useCallback(() => {
+    if (state.isPlaying) return; // Already playing
+    commonControlHandler(togglePlayPauseAction, () => dispatch({ type: "SET_IS_PLAYING_OPTIMISTIC", payload: true }))
+  }, [state.isPlaying, commonControlHandler])
+
+  const pause = useCallback(() => {
+    if (!state.isPlaying) return; // Already paused
+    commonControlHandler(togglePlayPauseAction, () => dispatch({ type: "SET_IS_PLAYING_OPTIMISTIC", payload: false }))
+  }, [state.isPlaying, commonControlHandler])
+  
+  const togglePlayPause = useCallback(() => {
+    commonControlHandler(togglePlayPauseAction, () => dispatch({ type: "SET_IS_PLAYING_OPTIMISTIC", payload: !state.isPlaying }))
+  }, [state.isPlaying, commonControlHandler])
+
+  const nextTrack = useCallback(() => {
+    commonControlHandler(nextTrackAction)
+  }, [commonControlHandler])
+
+  const prevTrack = useCallback(() => {
+    commonControlHandler(previousTrackAction)
+  }, [commonControlHandler])
+
+  const seek = useCallback(
+    (positionMs: number) => {
+      if (state.track && positionMs >= 0 && positionMs <= state.track.durationMs) {
+        commonControlHandler(() => seekToPositionAction(positionMs), () => dispatch({ type: 'SET_PROGRESS_LOCAL', payload: positionMs }))
+      } else {
+        toast.error("Invalid seek position.")
+      }
+    },
+    [state.track, commonControlHandler]
+  )
+
+  const setVolume = useCallback(
+    (volumePercent: number) => {
+      const newVolume = Math.max(0, Math.min(100, volumePercent))
+      commonControlHandler(() => setVolumeAction(newVolume))
+      // Optimistic update for volume slider could be dispatching SET_VOLUME here too,
+      // but Spotify API for volume is usually quick. Let sync handle it.
+    },
+    [commonControlHandler]
+  )
+
+  const toggleShuffle = useCallback(() => {
+    const newShuffleState = !state.shuffleState
+    commonControlHandler(() => toggleShuffleAction(newShuffleState))
+  }, [state.shuffleState, commonControlHandler])
+
+  const setRepeatMode = useCallback(
+    (mode: "track" | "context" | "off") => {
+      commonControlHandler(() => setRepeatModeAction(mode))
+    },
+    [commonControlHandler]
+  )
+
+  return {
+    playerState: state,
+    controls: {
+      play,
+      pause,
+      togglePlayPause,
+      nextTrack,
+      prevTrack,
+      seek,
+      setVolume,
+      toggleShuffle,
+      setRepeatMode,
+    },
+    syncNow: () => syncPlaybackState(true), // Expose manual sync if needed
+  }
+}
