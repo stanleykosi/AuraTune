@@ -16,6 +16,7 @@
  * - `react`: For JSX and component definition.
  * - `next/link`: For client-side navigation between pages.
  * - `lucide-react`: For icons used in navigation links.
+ * - `next/image`: For displaying SVG images.
  *
  * @notes
  * - Active link styling (highlighting the current page's link) will require
@@ -28,13 +29,14 @@
 
 import React from "react"
 import Link from "next/link"
+import Image from "next/image"
 import {
   LayoutDashboard,
   Sparkles, // Used for Curated Templates
   ListMusic, // Using for Track Match
   BarChart3,
   Settings,
-  Music, // Example icon for AuraTune app logo
+  // Music, // Example icon for AuraTune app logo - Removed as we are using SVG
 } from "lucide-react"
 
 // Define a type for navigation items for better structure and maintainability
@@ -67,13 +69,19 @@ const navItems: NavItem[] = [
  */
 export default async function Sidebar(): Promise<JSX.Element> {
   return (
-    <aside className="hidden md:flex md:flex-col md:w-64 bg-card text-card-foreground border-r border-border p-4 h-full shrink-0">
+    <aside className="flex flex-col bg-card text-card-foreground border-r border-border p-4 h-full shrink-0 md:w-64 transition-all duration-300 ease-in-out w-20 md:items-start items-center">
       <div className="flex items-center gap-2 text-2xl font-semibold text-primary mb-8 pt-2">
-        <Music className="h-8 w-8" />
-        <span>AuraTune</span>
+        <Image
+          src="/auratune-logo-placeholder.svg"
+          alt="AuraTune Logo"
+          width={32}
+          height={32}
+          className="h-8 w-8"
+        />
+        <span className="hidden md:inline">AuraTune</span>
       </div>
 
-      <nav className="flex flex-col space-y-1">
+      <nav className="flex flex-col space-y-1 w-full">
         {navItems.map((item) => {
           const IconComponent = item.icon
           return (
@@ -82,20 +90,20 @@ export default async function Sidebar(): Promise<JSX.Element> {
               href={item.href}
               className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground transition-colors duration-150 ease-in-out
                          hover:bg-primary/10 hover:text-primary
-                         focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              // Active state placeholder:
-              // Add logic here to apply 'bg-primary/10 text-primary' if item.href matches current path
+                         focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:justify-start justify-center"
+            // Active state placeholder:
+            // Add logic here to apply 'bg-primary/10 text-primary' if item.href matches current path
             >
               <IconComponent className="h-5 w-5" />
-              <span>{item.label}</span>
+              <span className="hidden md:inline">{item.label}</span>
             </Link>
           )
         })}
       </nav>
 
-      <div className="mt-auto text-xs text-muted-foreground pb-2">
-        <p>© {new Date().getFullYear()} AuraTune</p>
-        {/* Add version number or other footer info if needed */}
+      <div className="mt-auto text-xs text-muted-foreground pb-2 text-center md:text-left">
+        <p className="hidden md:block">© {new Date().getFullYear()} AuraTune</p>
+        <p className="md:hidden">©{new Date().getFullYear()}</p>
       </div>
     </aside>
   )
