@@ -14,6 +14,7 @@
  * - Calls `generateAndPreviewPlaylistFromTemplateAction` to fetch playlist preview data.
  * - Calls `saveGeneratedPlaylistToSpotifyAction` to save the playlist.
  * - Shows loading indicators and error messages using toasts and alerts.
+ * - Uses `LoadingSpinner` for a general loading state.
  *
  * @dependencies
  * - `react`: For component definition, `useState`.
@@ -26,6 +27,7 @@
  * - `@/actions/generation/generation-actions`: For generation and saving actions.
  * - `@/types/playlist-types`: For `PlaylistPreviewData`.
  * - `@/components/shared/playlist-preview-modal`: Modal to display playlist preview.
+ * - `@/components/shared/loading-spinner`: Reusable loading spinner component.
  *
  * @notes
  * - Marked as `"use client"` due to state management and event handling.
@@ -45,15 +47,16 @@ import {
   generateAndPreviewPlaylistFromTemplateAction,
   saveGeneratedPlaylistToSpotifyAction,
   PlaylistSavePayload,
-} from "@/actions/generation/generation-actions" // Updated import path
+} from "@/actions/generation/generation-actions"
 import { PlaylistPreviewData } from "@/types"
 import PlaylistPreviewModal from "@/components/shared/playlist-preview-modal"
+import LoadingSpinner from "@/components/shared/loading-spinner" // Import the new spinner
 
 interface CuratedTemplateGridProps {
   templates: SelectCuratedTemplate[]
 }
 
-// Add these constants at the top of the file after imports
+// Constants for retry logic
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY = 1000; // 1 second
 const MAX_RETRY_DELAY = 10000; // 10 seconds
@@ -177,9 +180,6 @@ export default function CuratedTemplateGrid({
       editedName,
       editedDescription,
       tracks: playlistPreviewData.tracks,
-      // totalTracks and estimatedDurationMs are not directly needed by save action,
-      // as they are derived from tracks for DB record. But we can pass them.
-      // For now, the save action recalculates them.
       generationMethod: playlistGenerationMethodEnum.enumValues[0], // "curated_template"
       generationParams: { templateId: selectedTemplateId },
     };
@@ -255,10 +255,7 @@ export default function CuratedTemplateGrid({
       )}
 
       {isLoadingGeneration && !selectedTemplateId && ( // Global loading if no specific card is targeted yet
-        <div className="flex items-center justify-center space-x-2 py-4">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading templates...</p>
-        </div>
+        <LoadingSpinner text="Loading templates..." /> // Use the new spinner
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
