@@ -15,7 +15,7 @@
  *
  * @notes
  * - The `OPENROUTER_API_KEY` environment variable must be set in `.env.local`.
- * - The default model is set to "anthropic/claude-3.7-sonnet", but can be overridden.
+ * - The default model is set to "anthropic/claude-sonnet-4", but can be overridden.
  * - Error handling for API calls is included.
  */
 
@@ -23,7 +23,7 @@ import OpenAI from "openai"
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-const DEFAULT_MODEL = "anthropic/claude-3.7-sonnet" // Latest Claude model with best performance for music suggestions
+const DEFAULT_MODEL = "anthropic/claude-sonnet-4" // Latest Claude model with best performance for music suggestions
 
 let openRouterClientInstance: OpenAI | null = null
 
