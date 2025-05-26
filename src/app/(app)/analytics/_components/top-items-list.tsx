@@ -98,6 +98,11 @@ export default function TopItemsList({
                   title={secondaryText}
                 >
                   {secondaryText}
+                  {itemType === "tracks" && "popularity" in item && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      • Popularity: {(item as SpotifyApi.TrackObjectFull).popularity}%
+                    </span>
+                  )}
                 </p>
               )}
             </div>
