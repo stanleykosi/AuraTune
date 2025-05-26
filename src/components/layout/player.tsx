@@ -41,8 +41,6 @@ import {
   Volume2,
   VolumeX,
   Shuffle,
-  Repeat,
-  Repeat1,
   Music2,
   Loader2,
   AlertCircle,
@@ -80,7 +78,6 @@ export default function Player(): JSX.Element {
     setVolume,
     nextTrack,
     previousTrack,
-    setRepeatMode
   } = useSpotifyWebPlayback()
 
   const [localVolume, setLocalVolume] = useState(state.volume)
@@ -124,22 +121,11 @@ export default function Player(): JSX.Element {
   const isLoading = !isReady
   const isControlDisabled = isLoading
 
-  const getRepeatIcon = () => {
-    switch (state.repeatMode) {
-      case "track":
-        return <Repeat1 className="h-4 w-4 sm:h-5 sm:w-5" />
-      case "context":
-        return <Repeat className="h-4 w-4 sm:h-5 sm:w-5" />
-      default: // "off"
-        return <Repeat className="h-4 w-4 sm:h-5 sm:w-5" />
-    }
-  }
-
   return (
-    <footer className="h-24 bg-card border-t border-border flex items-center justify-between px-4 sm:px-6 shrink-0 text-card-foreground">
+    <footer className="h-24 bg-card border-t border-border flex items-center justify-between px-2 sm:px-4 md:px-6 shrink-0 text-card-foreground">
       {/* Left Section: Track Info */}
-      <div className="flex items-center gap-3 w-1/3 min-w-[200px]">
-        <Avatar className="h-14 w-14 rounded-md">
+      <div className="flex items-center gap-3 w-full sm:w-1/3 min-w-[180px] sm:min-w-[200px] flex-shrink sm:flex-shrink-0">
+        <Avatar className="h-12 w-12 sm:h-14 sm:w-14 rounded-md">
           {state.currentTrack?.album.images[0]?.url ? (
             <AvatarImage src={state.currentTrack.album.images[0].url} alt={state.currentTrack.album.name} />
           ) : (
@@ -159,8 +145,8 @@ export default function Player(): JSX.Element {
       </div>
 
       {/* Center Section: Playback Controls & Progress */}
-      <div className="flex flex-col items-center gap-2 w-1/3 max-w-md">
-        <div className="flex items-center gap-1 sm:gap-2">
+      <div className="flex flex-col items-center gap-1 sm:gap-2 w-auto sm:w-1/3 max-w-md">
+        <div className="flex items-center gap-0.5 sm:gap-1 md:gap-2">
           <Button
             variant="ghost"
             size="icon"
@@ -169,7 +155,7 @@ export default function Player(): JSX.Element {
             onClick={previousTrack}
             disabled={isControlDisabled}
           >
-            <SkipBack className="h-5 w-5 sm:h-6 sm:w-6" />
+            <SkipBack className="h-4 w-4 sm:h-5 sm:w-6" />
           </Button>
 
           <Button
@@ -197,31 +183,12 @@ export default function Player(): JSX.Element {
             onClick={nextTrack}
             disabled={isControlDisabled}
           >
-            <SkipForward className="h-5 w-5 sm:h-6 sm:w-6" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`hover:bg-primary/10 ${state.repeatMode !== "off" ? "text-primary" : "text-muted-foreground hover:text-primary/80"}`}
-            aria-label="Toggle Repeat"
-            onClick={() => {
-              if (state.repeatMode === "off") {
-                setRepeatMode("context")
-              } else if (state.repeatMode === "context") {
-                setRepeatMode("track")
-              } else {
-                setRepeatMode("off")
-              }
-            }}
-            disabled={isControlDisabled}
-          >
-            {getRepeatIcon()}
+            <SkipForward className="h-4 w-4 sm:h-5 sm:w-6" />
           </Button>
         </div>
 
-        <div className="flex items-center gap-2 w-full max-w-xs sm:max-w-sm md:max-w-md">
-          <span className="text-xs text-muted-foreground w-10 text-center">
+        <div className="flex items-center gap-1 sm:gap-2 w-full max-w-xs sm:max-w-sm md:max-w-md">
+          <span className="text-xs text-muted-foreground w-9 sm:w-10 text-center">
             {formatDuration(localProgress)}
           </span>
           <Slider
@@ -234,24 +201,24 @@ export default function Player(): JSX.Element {
             onValueCommit={handleProgressCommit}
             disabled={isControlDisabled || !state.duration}
           />
-          <span className="text-xs text-muted-foreground w-10 text-center">
+          <span className="text-xs text-muted-foreground w-9 sm:w-10 text-center">
             {formatDuration(state.duration)}
           </span>
         </div>
       </div>
 
       {/* Right Section: Volume & Device Info */}
-      <div className="flex items-center justify-end gap-2 sm:gap-3 w-1/3 min-w-[150px]">
+      <div className="flex items-center justify-end gap-1 sm:gap-2 md:gap-3 w-auto sm:w-1/3 min-w-[100px] sm:min-w-[150px]">
         {localVolume === 0 ? (
-          <VolumeX className="h-5 w-5 text-muted-foreground" />
+          <VolumeX className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
         ) : (
-          <Volume2 className="h-5 w-5 text-muted-foreground" />
+          <Volume2 className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
         )}
         <Slider
           value={[localVolume]}
           max={100}
           step={1}
-          className="w-20 sm:w-24"
+          className="w-16 sm:w-20 md:w-24"
           aria-label="Volume Control"
           onValueChange={handleVolumeChange}
           onValueCommit={handleVolumeCommit}
