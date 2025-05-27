@@ -28,6 +28,7 @@
 import React from "react"
 import Image from "next/image"
 import * as LucideIcons from "lucide-react"
+import { motion } from "framer-motion"
 import {
   Card,
   CardContent,
@@ -124,39 +125,61 @@ export default function CuratedTemplateCard({
     }
   }
 
+  // Animation variants for the card
+  const cardVariants = {
+    initial: { scale: 1, y: 0, boxShadow: "0px 5px 10px rgba(0, 0, 0, 0.05)" },
+    hover: { scale: 1.03, y: -2, boxShadow: "0px 10px 20px rgba(0, 0, 0, 0.1)" },
+    tap: { scale: 0.98 },
+  }
+
+  const cardTransition = {
+    type: "spring",
+    stiffness: 300,
+    damping: 20,
+  }
+
   return (
-    <Card
-      className={`h-full flex flex-col group transition-all duration-200 ease-in-out
-                 bg-card/80 backdrop-blur-sm hover:bg-card
-                 ${isLoading ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:shadow-xl hover:border-primary/50"}`}
-      onClick={handleClick}
-      onKeyDown={(e) => {
-        if ((e.key === "Enter" || e.key === " ") && !isLoading) {
-          onClick(template.id)
-        }
-      }}
-      tabIndex={isLoading ? -1 : 0}
-      role="button"
-      aria-label={`Select template: ${template.name}. Description: ${template.description}`}
-      aria-disabled={isLoading}
-      data-testid={`curated-template-card-${template.id}`}
+    <motion.div
+      variants={!isLoading ? cardVariants : undefined}
+      initial="initial"
+      whileHover={!isLoading ? "hover" : undefined}
+      whileTap={!isLoading ? "tap" : undefined}
+      transition={!isLoading ? cardTransition : undefined}
+      className="h-full" // Ensure motion.div takes full height for layout
     >
-      <CardHeader className="items-center text-center pt-6 pb-4">
-        <div className="mb-3 p-3 bg-primary/10 rounded-full group-hover:bg-accent/10 transition-colors duration-200">
-          <TemplateIcon
-            iconUrl={template.icon_url}
-            templateName={template.name}
-          />
-        </div>
-        <CardTitle className="text-lg font-semibold group-hover:text-primary transition-colors duration-200">
-          {template.name}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex-grow text-center pb-6 px-4">
-        <CardDescription className="text-sm text-muted-foreground group-hover:text-foreground/90 transition-colors duration-200 leading-relaxed">
-          {template.description}
-        </CardDescription>
-      </CardContent>
-    </Card>
+      <Card
+        className={`h-full flex flex-col group transition-all duration-200 ease-in-out
+                   bg-card/80 backdrop-blur-sm hover:bg-card
+                   ${isLoading ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:shadow-xl hover:border-primary/50"}`}
+        onClick={!isLoading ? handleClick : undefined}
+        onKeyDown={(e) => {
+          if (!isLoading && (e.key === "Enter" || e.key === " ")) {
+            onClick(template.id)
+          }
+        }}
+        tabIndex={isLoading ? -1 : 0}
+        role="button"
+        aria-label={`Select template: ${template.name}. Description: ${template.description}`}
+        aria-disabled={isLoading}
+        data-testid={`curated-template-card-${template.id}`}
+      >
+        <CardHeader className="items-center text-center pt-6 pb-4">
+          <div className="mb-3 p-3 bg-primary/10 rounded-full group-hover:bg-accent/10 transition-colors duration-200">
+            <TemplateIcon
+              iconUrl={template.icon_url}
+              templateName={template.name}
+            />
+          </div>
+          <CardTitle className="text-lg font-semibold group-hover:text-primary transition-colors duration-200">
+            {template.name}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex-grow text-center pb-6 px-4">
+          <CardDescription className="text-sm text-muted-foreground group-hover:text-foreground/90 transition-colors duration-200 leading-relaxed">
+            {template.description}
+          </CardDescription>
+        </CardContent>
+      </Card>
+    </motion.div>
   )
 }

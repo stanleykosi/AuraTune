@@ -30,6 +30,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import {
   Dialog,
   DialogContent,
@@ -124,101 +125,113 @@ export default function PlaylistPreviewModal({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-lg sm:max-w-2xl max-h-[90vh] flex flex-col p-0">
-        <DialogHeader className="p-6 pb-0">
-          <DialogTitle className="text-2xl flex items-center">
-            <ListMusic className="mr-2 h-6 w-6 text-primary" />
-            Generated Playlist Preview
-          </DialogTitle>
-          <DialogDescription>
-            Review your AI-generated playlist. You can edit the name and
-            description before saving. {isReady ? "Click the play button on any track to preview it." : "Please wait for the player to initialize..."}
-          </DialogDescription>
-        </DialogHeader>
+    <AnimatePresence>
+      {isOpen && (
+        <Dialog open={isOpen} onOpenChange={onOpenChange}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            layout
+          >
+            <DialogContent className="w-[95vw] max-w-lg sm:max-w-2xl max-h-[90vh] flex flex-col p-0">
+              <DialogHeader className="p-6 pb-0">
+                <DialogTitle className="text-2xl flex items-center">
+                  <ListMusic className="mr-2 h-6 w-6 text-primary" />
+                  Generated Playlist Preview
+                </DialogTitle>
+                <DialogDescription>
+                  Review your AI-generated playlist. You can edit the name and
+                  description before saving. {isReady ? "Click the play button on any track to preview it." : "Please wait for the player to initialize..."}
+                </DialogDescription>
+              </DialogHeader>
 
-        <div className="flex-grow overflow-y-auto px-6 py-4 space-y-6">
-          {/* Editable Name and Description */}
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="playlistName" className="text-sm font-medium flex items-center mb-1">
-                <Edit3 className="mr-2 h-4 w-4 text-muted-foreground" />
-                Playlist Name
-              </Label>
-              <Input
-                id="playlistName"
-                value={editedName}
-                onChange={(e) => setEditedName(e.target.value)}
-                className="text-lg"
-                maxLength={100}
-              />
-            </div>
-            <div>
-              <Label htmlFor="playlistDescription" className="text-sm font-medium flex items-center mb-1">
-                <Edit3 className="mr-2 h-4 w-4 text-muted-foreground" />
-                Description (Optional)
-              </Label>
-              <Textarea
-                id="playlistDescription"
-                value={editedDescription}
-                onChange={(e) => setEditedDescription(e.target.value)}
-                placeholder="A short, catchy description for your playlist..."
-                rows={3}
-                maxLength={300}
-              />
-            </div>
-          </div>
+              <div className="flex-grow overflow-y-auto px-6 py-4 space-y-6">
+                {/* Editable Name and Description */}
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="playlistName" className="text-sm font-medium flex items-center mb-1">
+                      <Edit3 className="mr-2 h-4 w-4 text-muted-foreground" />
+                      Playlist Name
+                    </Label>
+                    <Input
+                      id="playlistName"
+                      value={editedName}
+                      onChange={(e) => setEditedName(e.target.value)}
+                      className="text-lg"
+                      maxLength={100}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="playlistDescription" className="text-sm font-medium flex items-center mb-1">
+                      <Edit3 className="mr-2 h-4 w-4 text-muted-foreground" />
+                      Description (Optional)
+                    </Label>
+                    <Textarea
+                      id="playlistDescription"
+                      value={editedDescription}
+                      onChange={(e) => setEditedDescription(e.target.value)}
+                      placeholder="A short, catchy description for your playlist..."
+                      rows={3}
+                      maxLength={300}
+                    />
+                  </div>
+                </div>
 
-          {/* Playlist Stats */}
-          <div className="flex items-center justify-between text-sm text-muted-foreground bg-secondary/30 p-3 rounded-md">
-            <div className="flex items-center">
-              <ListMusic className="mr-2 h-4 w-4" />
-              <span>{playlistData.totalTracks} tracks</span>
-            </div>
-            <div className="flex items-center">
-              <Clock className="mr-2 h-4 w-4" />
-              <span>
-                {formatDurationVerbose(playlistData.estimatedDurationMs)}
-              </span>
-            </div>
-          </div>
+                {/* Playlist Stats */}
+                <div className="flex items-center justify-between text-sm text-muted-foreground bg-secondary/30 p-3 rounded-md">
+                  <div className="flex items-center">
+                    <ListMusic className="mr-2 h-4 w-4" />
+                    <span>{playlistData.totalTracks} tracks</span>
+                  </div>
+                  <div className="flex items-center">
+                    <Clock className="mr-2 h-4 w-4" />
+                    <span>
+                      {formatDurationVerbose(playlistData.estimatedDurationMs)}
+                    </span>
+                  </div>
+                </div>
 
-          {/* Track List */}
-          <div>
-            <h3 className="text-md font-semibold mb-2 text-foreground">Tracks:</h3>
-            {playlistData.tracks.length > 0 ? (
-              <div className="max-h-[300px] overflow-y-auto border rounded-md divide-y divide-border">
-                {playlistData.tracks.map((track, index) => (
-                  <TrackListItem
-                    key={track.id || `track-${index}`}
-                    track={track}
-                    index={index}
-                    onPlay={handlePlayTrack}
-                    isPlaying={state.currentTrack?.id === track.id && state.isPlaying}
-                  />
-                ))}
+                {/* Track List */}
+                <div>
+                  <h3 className="text-md font-semibold mb-2 text-foreground">Tracks:</h3>
+                  {playlistData.tracks.length > 0 ? (
+                    <div className="max-h-[300px] overflow-y-auto border rounded-md divide-y divide-border">
+                      {playlistData.tracks.map((track, index) => (
+                        <TrackListItem
+                          key={track.id || `track-${index}`}
+                          track={track}
+                          index={index}
+                          onPlay={handlePlayTrack}
+                          isPlaying={state.currentTrack?.id === track.id && state.isPlaying}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No tracks were found for this playlist.
+                    </p>
+                  )}
+                </div>
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No tracks were found for this playlist.
-              </p>
-            )}
-          </div>
-        </div>
 
-        <DialogFooter className="p-6 border-t mt-auto flex flex-col space-y-3 sm:flex-row sm:justify-between sm:items-center sm:space-y-0">
-          <DialogClose asChild>
-            <Button variant="outline" onClick={onDiscard} disabled={isSaving} className="w-full sm:w-auto">
-              <XCircle className="mr-2 h-4 w-4" />
-              Discard
-            </Button>
-          </DialogClose>
-          <Button onClick={handleSave} disabled={isSaving || playlistData.tracks.length === 0} className="w-full sm:w-auto">
-            <Save className="mr-2 h-4 w-4" />
-            {isSaving ? "Saving..." : "Save to Spotify"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+              <DialogFooter className="p-6 border-t mt-auto flex flex-col space-y-3 sm:flex-row sm:justify-between sm:items-center sm:space-y-0">
+                <DialogClose asChild>
+                  <Button variant="outline" onClick={onDiscard} disabled={isSaving} className="w-full sm:w-auto">
+                    <XCircle className="mr-2 h-4 w-4" />
+                    Discard
+                  </Button>
+                </DialogClose>
+                <Button onClick={handleSave} disabled={isSaving || playlistData.tracks.length === 0} className="w-full sm:w-auto">
+                  <Save className="mr-2 h-4 w-4" />
+                  {isSaving ? "Saving..." : "Save to Spotify"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </motion.div>
+        </Dialog>
+      )}
+    </AnimatePresence>
   )
 }

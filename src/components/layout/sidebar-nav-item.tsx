@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion'; // Added framer-motion import
 
 // Map icon names to actual Lucide components
 const iconComponents: { [key: string]: LucideIcon } = {
@@ -45,21 +46,32 @@ export function SidebarNavItem({ href, label, iconName }: SidebarNavItemProps) {
   }
 
   return (
-    <Link
-      href={href}
-      className={cn(
-        'flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary',
-        'md:justify-start justify-center',
-        isActive && 'bg-muted text-primary'
-      )}
-      aria-current={isActive ? 'page' : undefined}
+    <motion.div
+      className="rounded-lg"
+      whileHover={{
+        scale: 1.03,
+        backgroundColor: isActive ? "hsl(var(--muted))" : "hsl(var(--accent)/0.075)"
+      }}
+      whileTap={{ scale: 0.97 }}
+      transition={{ duration: 0.15 }}
     >
-      <Icon size={20} />
-      {isClient ? (
-        <span className="hidden md:inline">{label}</span>
-      ) : (
-        <>{label}</>
-      )}
-    </Link>
+      <Link
+        href={href}
+        className={cn(
+          'flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary',
+          'md:justify-start justify-center',
+          isActive && 'bg-muted text-primary'
+        )}
+        aria-current={isActive ? 'page' : undefined}
+      >
+        <Icon size={20} />
+        {isClient ? (
+          <span className="hidden md:inline">{label}</span>
+        ) : (
+          // Fallback for SSR to avoid layout shift, though isClient makes it client-rendered
+          <span className="hidden md:inline">{label}</span>
+        )}
+      </Link>
+    </motion.div>
   );
 }
