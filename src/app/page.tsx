@@ -55,19 +55,17 @@ export default async function HomePage(): Promise<JSX.Element> {
           </p>
         </header>
 
-        <main className="flex flex-col gap-8 items-center">
-          <div className="p-4 sm:p-6 border rounded-lg shadow-md bg-card">
-            <h2 className="text-2xl font-semibold mb-4 text-card-foreground">
-              Authentication Status
-            </h2>
+        <main className="flex flex-col items-center justify-center text-center px-4">
+          <p className="text-xl sm:text-2xl text-foreground mb-8 max-w-lg leading-relaxed">
+            Dive into a seamless music experience. <br />
+            Connect with Spotify to unlock personalized AI-powered playlists.
+          </p>
+          <div className="transform transition-transform duration-300 hover:scale-105">
             <AuthButton />
           </div>
-
-          <div className="mt-8 text-center">
-            <p className="text-sm text-muted-foreground">
-              Connect your Spotify account to get started.
-            </p>
-          </div>
+          <p className="mt-8 text-sm text-muted-foreground">
+            Your next favorite song is just a click away.
+          </p>
         </main>
       </div> {/* End of content wrapper */}
 
