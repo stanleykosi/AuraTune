@@ -150,10 +150,3 @@ The following environment variables need to be set in your `.env.local` file:
 This Next.js application is designed to be easily deployable on platforms like [Vercel](https://vercel.com/), the creators of Next.js.
 Ensure all environment variables are configured in your deployment environment.
 
-## Contributing
-
-(Placeholder for contribution guidelines if this were an open-source project.)
-
-## License
-
-This project is currently unlicensed.
