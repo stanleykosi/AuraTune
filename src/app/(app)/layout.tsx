@@ -25,6 +25,7 @@
 import React from "react"
 import Sidebar from "@/components/layout/sidebar"
 import Player from "@/components/layout/player"
+import PageTransitionWrapper from "@/components/layout/page-transition-wrapper"
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -44,10 +45,7 @@ export default async function AppLayout({
     <div className="flex h-screen flex-col bg-background text-foreground font-[family-name:var(--font-geist-sans)]">
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 min-w-0">
-          {children}
-        </main>
+        <PageTransitionWrapper>{children}</PageTransitionWrapper>
       </div>
 
       <Player />
