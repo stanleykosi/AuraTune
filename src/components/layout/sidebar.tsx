@@ -28,9 +28,9 @@
 "use client"
 
 import React from "react"
-import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarNav } from "./sidebar-nav"
+import Image from "next/image"
 
 /**
  * Sidebar component.
@@ -41,9 +41,17 @@ export default function Sidebar(): JSX.Element {
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex h-[52px] items-center justify-center">
-        <Button variant="ghost" className="w-full justify-start">
-          <span className="text-lg font-semibold">AuraTune</span>
-        </Button>
+        <div className="flex items-center w-full gap-2 md:justify-start justify-center md:pl-3">
+          <Image
+            src="/placeholder-album-art.png"
+            alt="AuraTune Logo"
+            width={32}
+            height={32}
+            className="rounded-md object-cover"
+            priority
+          />
+          <span className="text-lg font-semibold hidden md:inline">AuraTune</span>
+        </div>
       </div>
       <ScrollArea className="flex-1 px-2">
         <SidebarNav />

@@ -53,6 +53,7 @@
     "@testing-library/react": "^14.2.1",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.14.2",
+    "@types/pg": "^8.15.2",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@types/spotify-web-api-node": "^5.0.11",
