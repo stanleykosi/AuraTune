@@ -11,6 +11,7 @@ import {
   LucideIcon // Keep for type definition of the map values
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useEffect, useState } from 'react';
 
 // Map icon names to actual Lucide components
 const iconComponents: { [key: string]: LucideIcon } = {
@@ -31,6 +32,11 @@ export function SidebarNavItem({ href, label, iconName }: SidebarNavItemProps) {
   const pathname = usePathname();
   const isActive = pathname === href;
   const Icon = iconComponents[iconName]; // Look up the component from the map
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   if (!Icon) {
     // Optional: handle cases where an icon name might not be found
@@ -48,8 +54,12 @@ export function SidebarNavItem({ href, label, iconName }: SidebarNavItemProps) {
       )}
       aria-current={isActive ? 'page' : undefined}
     >
-      <Icon className="h-5 w-5" />
-      <span className="hidden md:inline">{label}</span>
+      <Icon size={20} />
+      {isClient ? (
+        <span className="hidden md:inline">{label}</span>
+      ) : (
+        <>{label}</>
+      )}
     </Link>
   );
 }
