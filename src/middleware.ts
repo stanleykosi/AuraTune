@@ -30,7 +30,7 @@ export default withAuth(
   // The `middleware` function itself can be used for additional logic after authorization,
   // or for tasks like adding headers. For basic protection, it can simply return NextResponse.next().
   // `withAuth` augments the `Request` object with `req.nextauth.token`.
-  function middleware(req: NextRequestWithAuth) {
+  function middleware(_req: NextRequestWithAuth) {
     // Example: Log the token or path for debugging (remove in production)
     // console.log("Token in middleware:", req.nextauth.token);
     // console.log("Accessing protected route:", req.nextUrl.pathname);

@@ -25,7 +25,7 @@
  * - The `error` field can be used to communicate token refresh failures to the client.
  */
 
-import { DefaultSession, DefaultUser, AdapterUser } from "next-auth"
+import { DefaultSession, DefaultUser } from "next-auth"
 import { JWT as NextAuthJWT } from "next-auth/jwt"
 
 declare module "next-auth/jwt" {
