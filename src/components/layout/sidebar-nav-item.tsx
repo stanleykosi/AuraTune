@@ -27,9 +27,21 @@ interface SidebarNavItemProps {
   href: string;
   label: string;
   iconName: string; // Changed from icon: LucideIcon to iconName: string
+  custom?: any; // Added custom prop for framer-motion staggering
 }
 
-export function SidebarNavItem({ href, label, iconName }: SidebarNavItemProps) {
+const navItemVariants = {
+  hidden: { opacity: 0, x: -20 },
+  visible: (i: number) => ({
+    opacity: 1,
+    x: 0,
+    transition: {
+      delay: i * 0.07, // Use custom prop for delay, matches staggerChildren in parent
+    },
+  }),
+};
+
+export function SidebarNavItem({ href, label, iconName, custom }: SidebarNavItemProps) {
   const pathname = usePathname();
   const isActive = pathname === href;
   const Icon = iconComponents[iconName]; // Look up the component from the map
@@ -48,6 +60,10 @@ export function SidebarNavItem({ href, label, iconName }: SidebarNavItemProps) {
   return (
     <motion.div
       className="rounded-lg"
+      variants={navItemVariants}
+      custom={custom}
+      initial="hidden"
+      animate="visible"
       whileHover={{
         scale: 1.03,
         backgroundColor: isActive ? "hsl(var(--muted))" : "hsl(var(--accent)/0.075)"

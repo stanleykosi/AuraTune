@@ -25,11 +25,12 @@
  *   For this basic implementation, hover states are provided.
  * - The navigation items are based on the application's main features.
  */
-"use server"
+"use client"
 
 import React from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { motion } from "framer-motion";
 import {
   LayoutDashboard,
   Sparkles, // Used for Curated Templates
@@ -70,7 +71,17 @@ const navItems: NavItem[] = [
  * Renders the application's navigation sidebar with links and icons.
  * @returns {Promise<JSX.Element>} The JSX for the sidebar.
  */
-export default async function Sidebar(): Promise<JSX.Element> {
+export default function Sidebar(): JSX.Element {
+  const navContainerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.07, // Adjust delay between items if needed
+      },
+    },
+  };
+
   return (
     <aside className="flex flex-col bg-card text-card-foreground border-r border-border p-4 h-full shrink-0 md:w-64 transition-all duration-300 ease-in-out w-20 md:items-start items-center">
       <div className="flex items-center gap-2 text-2xl font-semibold text-primary mb-8 pt-2">
@@ -84,16 +95,22 @@ export default async function Sidebar(): Promise<JSX.Element> {
         <span className="hidden md:inline">AuraTune</span>
       </div>
 
-      <nav className="flex flex-col space-y-1 w-full">
-        {navItems.map((item) => (
+      <motion.nav
+        className="flex flex-col space-y-1 w-full"
+        variants={navContainerVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        {navItems.map((item, index) => (
           <SidebarNavItem
             key={item.label}
             href={item.href}
             label={item.label}
-            iconName={item.iconName} // Pass iconName string
+            iconName={item.iconName}
+            custom={index}
           />
         ))}
-      </nav>
+      </motion.nav>
 
       {/* Copyright notice pushed to bottom and aligned */}
       <div className="mt-auto w-full text-xs text-muted-foreground pb-2 text-center md:text-left pt-4">

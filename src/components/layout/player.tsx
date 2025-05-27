@@ -33,6 +33,7 @@
 
 import React, { useState, useEffect, useCallback } from "react"
 import Image from "next/image"
+import { motion, AnimatePresence } from "framer-motion"
 import {
   Play,
   Pause,
@@ -135,56 +136,82 @@ export default function Player(): JSX.Element {
           )}
         </Avatar>
         <div className="flex flex-col overflow-hidden">
-          <p className="text-sm font-semibold truncate" title={state.currentTrack?.name || "No track playing"}>
-            {state.currentTrack?.name || "No track playing"}
-          </p>
-          <p className="text-xs text-muted-foreground truncate sm:inline-block" title={state.currentTrack?.artists || "Unknown artist"}>
-            {state.currentTrack?.artists || (isReady ? "Unknown artist" : "No active device")}
-          </p>
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={`track-name-${state.currentTrack?.id || 'empty'}`}
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.2 }}
+              className="text-sm font-semibold truncate"
+              title={state.currentTrack?.name || "No track playing"}
+            >
+              {state.currentTrack?.name || "No track playing"}
+            </motion.p>
+          </AnimatePresence>
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={`track-artist-${state.currentTrack?.id || 'empty'}`}
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.2, delay: 0.05 }}
+              className="text-xs text-muted-foreground truncate sm:inline-block"
+              title={state.currentTrack?.artists || "Unknown artist"}
+            >
+              {state.currentTrack?.artists || (isReady ? "Unknown artist" : "No active device")}
+            </motion.p>
+          </AnimatePresence>
         </div>
       </div>
 
       {/* Center Section: Playback Controls & Progress */}
       <div className="flex flex-col items-center gap-1 sm:gap-2 flex-1 min-w-[130px]">
         <div className="flex items-center gap-0.5 sm:gap-1 md:gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-foreground hover:bg-primary/10 hover:text-primary/80"
-            aria-label="Previous Track"
-            onClick={previousTrack}
-            disabled={isControlDisabled}
-          >
-            <SkipBack className="h-4 w-4 sm:h-5 sm:w-6" />
-          </Button>
+          <motion.div whileHover={!isControlDisabled ? { scale: 1.1 } : {}} whileTap={!isControlDisabled ? { scale: 0.9 } : {}}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-foreground hover:bg-primary/10 hover:text-primary/80"
+              aria-label="Previous Track"
+              onClick={previousTrack}
+              disabled={isControlDisabled}
+            >
+              <SkipBack className="h-4 w-4 sm:h-5 sm:w-6" />
+            </Button>
+          </motion.div>
 
-          <Button
-            variant="default"
-            size="icon"
-            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 relative"
-            aria-label={state.isPlaying ? "Pause" : "Play"}
-            onClick={togglePlay}
-            disabled={isControlDisabled}
-          >
-            {isLoading ? (
-              <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin" />
-            ) : state.isPlaying ? (
-              <Pause className="h-5 w-5 sm:h-6 sm:w-6 fill-current" />
-            ) : (
-              <Play className="h-5 w-5 sm:h-6 sm:w-6 fill-current" />
-            )}
-          </Button>
+          <motion.div whileHover={!isControlDisabled ? { scale: 1.1 } : {}} whileTap={!isControlDisabled ? { scale: 0.9 } : {}}>
+            <Button
+              variant="default"
+              size="icon"
+              className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 relative"
+              aria-label={state.isPlaying ? "Pause" : "Play"}
+              onClick={togglePlay}
+              disabled={isControlDisabled}
+            >
+              {isLoading ? (
+                <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin" />
+              ) : state.isPlaying ? (
+                <Pause className="h-5 w-5 sm:h-6 sm:w-6 fill-current" />
+              ) : (
+                <Play className="h-5 w-5 sm:h-6 sm:w-6 fill-current" />
+              )}
+            </Button>
+          </motion.div>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-foreground hover:bg-primary/10 hover:text-primary/80"
-            aria-label="Next Track"
-            onClick={nextTrack}
-            disabled={isControlDisabled}
-          >
-            <SkipForward className="h-4 w-4 sm:h-5 sm:w-6" />
-          </Button>
+          <motion.div whileHover={!isControlDisabled ? { scale: 1.1 } : {}} whileTap={!isControlDisabled ? { scale: 0.9 } : {}}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-foreground hover:bg-primary/10 hover:text-primary/80"
+              aria-label="Next Track"
+              onClick={nextTrack}
+              disabled={isControlDisabled}
+            >
+              <SkipForward className="h-4 w-4 sm:h-5 sm:w-6" />
+            </Button>
+          </motion.div>
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2 w-full max-w-xs sm:max-w-sm md:max-w-md">
@@ -209,11 +236,13 @@ export default function Player(): JSX.Element {
 
       {/* Right Section: Volume & Device Info */}
       <div className="flex items-center justify-end gap-1 flex-shrink-0 min-w-[36px] sm:gap-2 sm:w-[170px] lg:w-1/4">
-        {localVolume === 0 ? (
-          <VolumeX className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-        ) : (
-          <Volume2 className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-        )}
+        <motion.div whileHover={!isControlDisabled ? { scale: 1.2 } : {}} whileTap={!isControlDisabled ? { scale: 0.9 } : {}} className="p-1">
+          {localVolume === 0 ? (
+            <VolumeX className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+          ) : (
+            <Volume2 className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+          )}
+        </motion.div>
         <Slider
           value={[localVolume]}
           max={100}
