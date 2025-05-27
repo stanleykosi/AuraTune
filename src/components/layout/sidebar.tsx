@@ -36,31 +36,33 @@ import {
   ListMusic, // Using for Track Match
   BarChart3,
   Settings,
+  // LucideIcon, // No longer needed here for NavItem type
   // LogOut icon is not strictly needed here anymore if AuthButton handles its own icon
 } from "lucide-react"
 // import AuthButton from "@/components/shared/auth-button" // Removed AuthButton import from here
+import { SidebarNavItem } from "./sidebar-nav-item"; // Import the new component
 
 // Define a type for navigation items for better structure and maintainability
 interface NavItem {
   href: string
   label: string
-  icon: React.ElementType // Lucide icons are components
+  iconName: string // Changed from icon: LucideIcon to iconName: string
 }
 
 const navItems: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard" },
   {
     href: "/generate/curated",
     label: "Curated Templates",
-    icon: Sparkles,
+    iconName: "Sparkles",
   },
   {
     href: "/generate/track-match",
     label: "Track Match",
-    icon: ListMusic,
+    iconName: "ListMusic",
   }, // New item for Track Match
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/analytics", label: "Analytics", iconName: "BarChart3" },
+  { href: "/settings", label: "Settings", iconName: "Settings" },
 ]
 
 /**
@@ -83,23 +85,14 @@ export default async function Sidebar(): Promise<JSX.Element> {
       </div>
 
       <nav className="flex flex-col space-y-1 w-full">
-        {navItems.map((item) => {
-          const IconComponent = item.icon
-          return (
-            <Link
-              key={item.label}
-              href={item.href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground transition-colors duration-150 ease-in-out
-                         hover:bg-primary/10 hover:text-primary
-                         focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:justify-start justify-center"
-            // Active state placeholder:
-            // Add logic here to apply 'bg-primary/10 text-primary' if item.href matches current path
-            >
-              <IconComponent className="h-5 w-5" />
-              <span className="hidden md:inline">{item.label}</span>
-            </Link>
-          )
-        })}
+        {navItems.map((item) => (
+          <SidebarNavItem
+            key={item.label}
+            href={item.href}
+            label={item.label}
+            iconName={item.iconName} // Pass iconName string
+          />
+        ))}
       </nav>
 
       {/* Copyright notice pushed to bottom and aligned */}

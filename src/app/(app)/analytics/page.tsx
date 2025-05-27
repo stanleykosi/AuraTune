@@ -566,7 +566,7 @@ export default async function AnalyticsPage(): Promise<JSX.Element> {
       </section>
 
       {/* Section for Spotify Top Items (Artists & Tracks) */}
-      <section aria-labelledby="spotify-activity-heading" className="bg-card p-6 rounded-lg shadow">
+      <section aria-labelledby="spotify-activity-heading" className="flex flex-col bg-card p-6 rounded-lg shadow">
         <h2 id="spotify-activity-heading" className="text-2xl font-bold tracking-tight text-card-foreground mb-6">
           Your Spotify Activity
         </h2>

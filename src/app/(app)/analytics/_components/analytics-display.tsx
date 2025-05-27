@@ -53,7 +53,7 @@ export default function AnalyticsDisplay({
   const timeRanges = ["short_term", "medium_term", "long_term"]
 
   return (
-    <Tabs defaultValue="short_term" className="w-full">
+    <Tabs defaultValue="short_term" className="w-full mt-6">
       <TabsList className="bg-white flex flex-col gap-1 mb-6 w-full md:grid md:grid-cols-3 md:rounded-md md:bg-muted md:p-1">
         {timeRanges.map((range) => (
           <TabsTrigger
