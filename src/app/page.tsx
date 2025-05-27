@@ -18,6 +18,9 @@
 
 import Image from "next/image"
 import AuthButton from "@/components/shared/auth-button" // Import the AuthButton
+import { getServerSession } from "next-auth/next" // Added for session check
+import { authOptions } from "@/lib/auth" // Added for authOptions
+import { redirect } from "next/navigation" // Added for redirect
 
 /**
  * HomePage component.
@@ -25,6 +28,13 @@ import AuthButton from "@/components/shared/auth-button" // Import the AuthButto
  * @returns {Promise<JSX.Element>} The JSX for the home page.
  */
 export default async function HomePage(): Promise<JSX.Element> {
+  const session = await getServerSession(authOptions) // Get session on server
+
+  // If user is logged in, redirect to dashboard
+  if (session?.user) {
+    redirect("/dashboard")
+  }
+
   return (
     <div className="flex flex-col min-h-screen font-[family-name:var(--font-geist-sans)]">
       {/* Content wrapper that grows and centers its content */}

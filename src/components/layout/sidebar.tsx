@@ -36,8 +36,9 @@ import {
   ListMusic, // Using for Track Match
   BarChart3,
   Settings,
-  // Music, // Example icon for AuraTune app logo - Removed as we are using SVG
+  // LogOut icon is not strictly needed here anymore if AuthButton handles its own icon
 } from "lucide-react"
+// import AuthButton from "@/components/shared/auth-button" // Removed AuthButton import from here
 
 // Define a type for navigation items for better structure and maintainability
 interface NavItem {
@@ -101,7 +102,8 @@ export default async function Sidebar(): Promise<JSX.Element> {
         })}
       </nav>
 
-      <div className="mt-auto text-xs text-muted-foreground pb-2 text-center md:text-left">
+      {/* Copyright notice pushed to bottom and aligned */}
+      <div className="mt-auto w-full text-xs text-muted-foreground pb-2 text-center md:text-left pt-4">
         <p className="hidden md:block">© {new Date().getFullYear()} AuraTune</p>
         <p className="md:hidden">©{new Date().getFullYear()}</p>
       </div>

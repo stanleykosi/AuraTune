@@ -23,13 +23,14 @@
 "use client"
 
 import { useSession, signIn, signOut } from "next-auth/react"
-import { LogIn, LogOut, UserCircle } from "lucide-react"
+import { LogOut, UserCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Avatar,
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar"
+import SpotifyIcon from "@/components/shared/spotify-icon"
 
 /**
  * AuthButton component.
@@ -69,7 +70,7 @@ export default function AuthButton(): JSX.Element | null {
             </p>
           </div>
         </div>
-        <Button variant="outline" onClick={() => signOut()}>
+        <Button variant="outline" onClick={() => signOut({ callbackUrl: "/" })}>
           <LogOut className="mr-2 h-4 w-4" />
           Sign out
         </Button>
@@ -78,8 +79,12 @@ export default function AuthButton(): JSX.Element | null {
   }
 
   return (
-    <Button onClick={() => signIn("spotify")}>
-      <LogIn className="mr-2 h-4 w-4" />
+    <Button
+      onClick={() => signIn("spotify", { callbackUrl: "/dashboard" })}
+      size="lg"
+      className="px-8 py-4 text-lg"
+    >
+      <SpotifyIcon size={22} className="mr-3" />
       Login with Spotify
     </Button>
   )
