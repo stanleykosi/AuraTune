@@ -20,13 +20,7 @@
 "use client"
 
 import React from "react"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import * as Icons from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 

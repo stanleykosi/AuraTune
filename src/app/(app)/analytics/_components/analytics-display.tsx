@@ -33,7 +33,6 @@ import {
 import TopItemsList from "./top-items-list"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle, Music, Users } from "lucide-react" // Users for artists, Music for tracks
-import type SpotifyWebApi from "spotify-web-api-node"
 
 interface AnalyticsDisplayProps {
   artistsData: Record<string, SpotifyApi.ArtistObjectFull[] | string>
@@ -46,10 +45,7 @@ const timeRangeMapping: Record<string, string> = {
   long_term: "All Time",
 }
 
-export default function AnalyticsDisplay({
-  artistsData,
-  tracksData,
-}: AnalyticsDisplayProps): JSX.Element {
+export function AnalyticsDisplay({ artistsData, tracksData }: AnalyticsDisplayProps): JSX.Element {
   const timeRanges = ["short_term", "medium_term", "long_term"]
 
   return (

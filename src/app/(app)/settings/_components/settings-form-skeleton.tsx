@@ -17,15 +17,8 @@
  */
 "use server" // Or "use client" if it had client-side logic, but for pure skeleton it can be server.
 
+import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardFooter,
-} from "@/components/ui/card"
 
 export default async function SettingsPageSkeleton(): Promise<JSX.Element> {
   return (

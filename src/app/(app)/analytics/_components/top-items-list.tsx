@@ -24,7 +24,6 @@
 import React from "react"
 import Image from "next/image"
 import { Music2 } from "lucide-react" // Fallback icon
-import type SpotifyWebApi from "spotify-web-api-node"
 import {
   Tooltip,
   TooltipContent,
@@ -111,7 +110,7 @@ export default function TopItemsList({
                         </TooltipTrigger>
                         <TooltipContent>
                           <div className="text-sm">
-                            Spotify's popularity score (0-100) is calculated based on the total number of plays and how recent they are. Higher scores indicate more popular tracks.
+                            Spotify&apos;s popularity score (0-100) is calculated based on the total number of plays and how recent they are. Higher scores indicate more popular tracks.
                           </div>
                         </TooltipContent>
                       </Tooltip>

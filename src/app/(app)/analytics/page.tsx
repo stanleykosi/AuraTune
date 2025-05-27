@@ -30,19 +30,17 @@
  */
 "use server"
 
-import React, { Suspense } from "react"
-import { getServerSession } from "next-auth/next"
+import { Suspense } from "react"
+import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { getPlaylistCountForUserAction } from "@/actions/db/playlists-actions"
 import { getSpotifyUserTopItemsAction } from "@/actions/spotify/spotify-user-data-actions"
 import StatsCard from "./_components/stats-card"
-import AnalyticsDisplay from "./_components/analytics-display"
+import { AnalyticsDisplay } from "./_components/analytics-display"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Skeleton } from "@/components/ui/skeleton" // Generic skeleton
+import { Skeleton } from "@/components/ui/skeleton"
 import { CardHeader, CardContent } from "@/components/ui/card"
-import SettingsPageSkeleton from "@/app/(app)/settings/_components/settings-form-skeleton" // Using settings skeleton as a placeholder
-import { AlertCircle, BarChart3, ListMusic, Music, Users } from "lucide-react"
-import type SpotifyWebApi from "spotify-web-api-node"
+import { AlertCircle } from "lucide-react"
 
 const TOP_ITEMS_LIMIT = 10 // Number of top artists/tracks to fetch
 
@@ -52,6 +50,22 @@ const timeRangeMapping: Record<string, string> = {
   medium_term: "last 6 months",
   long_term: "all time"
 };
+
+interface ErrorResponse {
+  message: string;
+  code?: string;
+  status?: number;
+  details?: unknown;
+}
+
+interface ApiResponse<T> {
+  isSuccess: boolean;
+  data?: T;
+  error?: ErrorResponse;
+  message?: string;
+  status?: number;
+  body?: unknown;
+}
 
 // Skeleton for AuraTune Stats Section (could be a single StatsCard skeleton)
 function AuraTuneStatsSkeleton(): JSX.Element {
@@ -182,13 +196,13 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
   ]
 
   // Add retry logic for API calls with better timeout handling
-  const fetchWithRetry = async (
-    fetchFn: () => Promise<any>,
+  const fetchWithRetry = async <T,>(
+    fetchFn: () => Promise<ApiResponse<T>>,
     retries = 3,
     initialDelay = 1000,
     maxDelay = 5000
-  ) => {
-    let lastError: any;
+  ): Promise<ApiResponse<T>> => {
+    let lastError: ErrorResponse | undefined;
     for (let i = 0; i < retries; i++) {
       try {
         console.log(`Attempt ${i + 1}/${retries} to fetch data...`);
@@ -202,15 +216,10 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
           message: result?.message
         });
 
-        // If we get a successful response, return it
-        if (result?.isSuccess && result?.data) {
+        if (result.isSuccess) {
           return result;
         }
-
-        // If we get a response but it's not successful, throw with the error message
-        if (!result?.isSuccess) {
-          throw new Error(result?.message || 'API request failed');
-        }
+        lastError = result.error;
 
         // If we get a timeout but have partial data, return it
         if (result?.error?.code === 'ETIMEDOUT' && result?.data) {
@@ -224,19 +233,19 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
         }
 
         return result;
-      } catch (error: any) {
-        lastError = error;
+      } catch (error) {
+        const apiError = error as ErrorResponse;
         console.log(`Attempt ${i + 1} failed:`, {
-          error: error.message,
-          code: error.code,
-          status: error.status,
-          body: error.body
+          error: apiError.message,
+          code: apiError.code,
+          status: apiError.status,
+          body: apiError.details
         });
 
         // Don't retry if it's not a retryable error
-        if (!isRetryableError(error)) {
-          console.log('Non-retryable error, failing immediately:', error.message);
-          throw error;
+        if (!isRetryableError(apiError)) {
+          console.log('Non-retryable error, failing immediately:', apiError.message);
+          throw apiError;
         }
 
         // Calculate delay with exponential backoff and jitter
@@ -255,27 +264,15 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
   };
 
   // Helper function to determine if an error is retryable
-  const isRetryableError = (error: any): boolean => {
+  const isRetryableError = (error: ErrorResponse): boolean => {
     // Network errors that are typically temporary
-    if (error.code === 'ETIMEDOUT' ||
-      error.code === 'ECONNRESET' ||
-      error.code === 'ECONNREFUSED' ||
-      error.message.includes('timeout') ||
-      error.message.includes('network') ||
-      error.message.includes('connection')) {
-      return true;
-    }
+    const retryableCodes = ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND'];
+    const retryableStatuses = [408, 429, 500, 502, 503, 504];
 
-    // Spotify API specific errors that are retryable
-    if (error.status === 429 || // Rate limit
-      error.status === 500 || // Internal server error
-      error.status === 502 || // Bad gateway
-      error.status === 503 || // Service unavailable
-      error.status === 504) { // Gateway timeout
-      return true;
-    }
-
-    return false;
+    return (
+      retryableCodes.includes(error.code || '') ||
+      (error.status !== undefined && retryableStatuses.includes(error.status))
+    );
   };
 
   try {
@@ -303,7 +300,7 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
         Promise.all(tracksDataPromises)
       ]),
       timeoutPromise
-    ]) as [any[], any[]];
+    ]) as [ApiResponse<SpotifyApi.ArtistObjectFull[]>[], ApiResponse<SpotifyApi.TrackObjectFull[]>[]];
     console.log('All requests completed successfully');
 
     // Log raw API responses for debugging
@@ -311,7 +308,6 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
       const trackResult = trackResults[index];
       console.log(`Raw Spotify API response for ${range} tracks:`, {
         status: trackResult?.status,
-        headers: trackResult?.headers,
         body: trackResult?.body,
         timestamp: new Date().toISOString()
       });
@@ -319,7 +315,6 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
 
     const artistsData: Record<string, SpotifyApi.ArtistObjectFull[] | string> = {}
     const tracksData: Record<string, SpotifyApi.TrackObjectFull[] | string> = {}
-    let hasErrors = false
 
     // Process and validate artist results
     timeRanges.forEach((range, index) => {
@@ -335,7 +330,6 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
         artistsData[range] = validArtists
       } else {
         artistsData[range] = result.message || `Failed to load top artists for ${range}.`
-        hasErrors = true
         console.error(`Error fetching top artists for ${range}:`, result.message)
       }
     })
@@ -365,7 +359,7 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
           tracks: result.data.map((t: SpotifyApi.TrackObjectFull) => ({
             id: t.id,
             name: t.name,
-            artists: t.artists.map(a => a.name).join(', '),
+            artists: t.artists.map((a: SpotifyApi.ArtistObjectSimplified) => a.name).join(', '),
             popularity: t.popularity
           }))
         });
@@ -408,7 +402,6 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
         if (validTracks.length === 0) {
           console.error(`No valid tracks found for ${range} after validation`);
           tracksData[range] = `No valid tracks found for ${range}. Please try again later.`;
-          hasErrors = true;
         } else {
           tracksData[range] = validTracks;
         }
@@ -421,7 +414,6 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
           body: result.body
         });
         tracksData[range] = errorMessage;
-        hasErrors = true;
       }
     });
 
@@ -455,8 +447,7 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
           // If medium_term and long_term are identical, show a more informative message
           if ((range1 === 'medium_term' && range2 === 'long_term') ||
             (range1 === 'long_term' && range2 === 'medium_term')) {
-            tracksData[range2] = `Note: Your ${timeRangeMapping[range2]} tracks are currently the same as your ${timeRangeMapping[range1]} tracks. This is a known limitation of Spotify's API. Your listening history is still being collected, and the data will differentiate over time.`;
-            // Don't set hasErrors to true since this is an expected API limitation
+            tracksData[range2] = `Note: Your ${timeRangeMapping[range2]} tracks are currently the same as your ${timeRangeMapping[range1]} tracks. This is a known limitation of Spotify&apos;s API. Your listening history is still being collected, and the data will differentiate over time.`;
           }
         }
       }
@@ -482,7 +473,7 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
           <AlertDescription>
             Could not fetch your Spotify activity data. This might be because:
             <ul className="list-disc list-inside mt-2">
-              <li>You haven't listened to enough music yet</li>
+              <li>You haven&apos;t listened to enough music yet</li>
               <li>Your Spotify account is new</li>
               <li>There was an issue connecting to Spotify</li>
             </ul>
@@ -493,12 +484,13 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
     }
 
     return <AnalyticsDisplay artistsData={artistsData} tracksData={tracksData} />;
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const spotifyError = error as ErrorResponse;
     console.error("Error in UserSpotifyActivitySection:", {
-      message: error.message,
-      code: error.code,
-      status: error.status,
-      body: error.body
+      message: spotifyError.message,
+      code: spotifyError.code,
+      status: spotifyError.status,
+      body: spotifyError.details
     });
 
     // More specific error message based on the error type
@@ -507,16 +499,16 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
       details: ""
     };
 
-    if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+    if (spotifyError.code === 'ETIMEDOUT' || spotifyError.message?.includes('timeout')) {
       errorInfo.message = "The request to Spotify timed out.";
       errorInfo.details = "This might be due to high server load or network issues.";
-    } else if (error.status === 429 || error.message.includes('rate limit')) {
+    } else if (spotifyError.status === 429 || spotifyError.message?.includes('rate limit')) {
       errorInfo.message = "We've hit Spotify's rate limit.";
       errorInfo.details = "Please try again in a few minutes.";
-    } else if (error.status === 401 || error.message.includes('token')) {
+    } else if (spotifyError.status === 401 || spotifyError.message?.includes('token')) {
       errorInfo.message = "Your Spotify session has expired.";
       errorInfo.details = "Please try logging out and back in.";
-    } else if (error.status === 403) {
+    } else if (spotifyError.status === 403) {
       errorInfo.message = "Access to Spotify data was denied.";
       errorInfo.details = "Please check your Spotify permissions.";
     }
@@ -548,32 +540,18 @@ async function UserSpotifyActivitySection(): Promise<JSX.Element> {
  */
 export default async function AnalyticsPage(): Promise<JSX.Element> {
   return (
-    <div className="container mx-auto py-8 px-4 sm:px-6 lg:px-8 font-[family-name:var(--font-geist-sans)] space-y-8">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight text-primary">
-          Analytics Dashboard
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Explore your AuraTune usage and Spotify listening habits.
-        </p>
-      </header>
-
-      {/* Section for AuraTune specific stats */}
-      <section aria-labelledby="auratune-stats-heading">
+    <div className="container mx-auto py-8 space-y-8">
+      <h1 className="text-3xl font-bold mb-8">Your Analytics</h1>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Suspense fallback={<AuraTuneStatsSkeleton />}>
           <AuraTuneStatsSection />
         </Suspense>
-      </section>
-
-      {/* Section for Spotify Top Items (Artists & Tracks) */}
-      <section aria-labelledby="spotify-activity-heading" className="flex flex-col bg-card p-6 rounded-lg shadow">
-        <h2 id="spotify-activity-heading" className="text-2xl font-bold tracking-tight text-card-foreground mb-6">
-          Your Spotify Activity
-        </h2>
+      </div>
+      <div className="mt-8">
         <Suspense fallback={<AnalyticsDisplaySkeleton />}>
           <UserSpotifyActivitySection />
         </Suspense>
-      </section>
+      </div>
     </div>
   )
 }

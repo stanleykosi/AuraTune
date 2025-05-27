@@ -44,9 +44,9 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea" // Make sure to add this: npx shadcn-ui@latest add textarea
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import TrackListItem from "@/components/shared/track-list-item"
+import { TrackListItem } from "@/components/shared/track-list-item"
 import { PlaylistPreviewData } from "@/types"
-import { ListMusic, Clock, Edit3, Save, XCircle, Play } from "lucide-react"
+import { ListMusic, Clock, Edit3, Save, XCircle } from "lucide-react"
 import { useSpotifyWebPlayback } from "@/lib/hooks/use-spotify-web-playback"
 import { toast } from "sonner"
 
@@ -91,7 +91,7 @@ export default function PlaylistPreviewModal({
 }: PlaylistPreviewModalProps): JSX.Element | null {
   const [editedName, setEditedName] = useState("")
   const [editedDescription, setEditedDescription] = useState("")
-  const { isReady, state, play, togglePlay } = useSpotifyWebPlayback()
+  const { isReady, state, play } = useSpotifyWebPlayback()
 
   useEffect(() => {
     if (playlistData) {

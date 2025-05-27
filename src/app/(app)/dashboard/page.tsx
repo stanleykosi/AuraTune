@@ -32,77 +32,111 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart, Music4, Sparkles as GenerateIcon } from "lucide-react"
 import AuthButton from "@/components/shared/auth-button"
 import Link from "next/link"
-import { Suspense } from "react" // Added Suspense import
-import DashboardSectionSkeleton from "./_components/DashboardSectionSkeleton" // Added import
+import { Suspense } from "react"
+import DashboardSectionSkeleton from "./_components/DashboardSectionSkeleton"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
+import { getSpotifyApi } from "@/lib/spotify-sdk"
 
 export default async function DashboardPage(): Promise<JSX.Element> {
   const session = await getServerSession(authOptions)
-
-  if (!session || !session.user) {
-    // This state should ideally not be reached if middleware is functioning.
+  if (!session?.accessToken) {
     return (
-      <div className="p-8 text-center">
-        <h1 className="text-2xl font-bold text-destructive">Access Denied</h1>
-        <p className="text-muted-foreground mt-2">
-          You must be logged in to view the dashboard.
-        </p>
+      <div className="flex h-full items-center justify-center">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Authentication Required</AlertTitle>
+          <AlertDescription>
+            Please sign in to access your dashboard.
+          </AlertDescription>
+        </Alert>
       </div>
     )
   }
 
-  const userName = session.user.name || "AuraTune User";
+  const spotifyApi = getSpotifyApi(session.accessToken)
+  if (!spotifyApi) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>
+            Failed to initialize Spotify API client.
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
 
-  return (
-    <div className="space-y-8 p-4 sm:p-6 lg:p-8 font-[family-name:var(--font-geist-sans)]">
-      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-3xl md:text-4xl font-bold text-primary">Welcome Back, {userName}!</h1>
-          <p className="text-lg text-muted-foreground">
-            Here's what's new with your AuraTune experience.
-          </p>
-        </div>
-        <div className="shrink-0">
-          <AuthButton />
-        </div>
-      </header>
+  try {
+    const userName = session.user?.name || "AuraTune User";
 
-      {/* Placeholder Cards Section */}
-      <Suspense fallback={<DashboardSectionSkeleton />}>
-        <DashboardCardsFetcher session={session} />
-      </Suspense>
+    return (
+      <div className="space-y-8 p-4 sm:p-6 lg:p-8 font-[family-name:var(--font-geist-sans)]">
+        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="text-3xl md:text-4xl font-bold text-primary">Welcome Back, {userName}!</h1>
+            <p className="text-lg text-muted-foreground">
+              Here&apos;s what&apos;s new with your AuraTune experience.
+            </p>
+          </div>
+          <div className="shrink-0">
+            <AuthButton />
+          </div>
+        </header>
 
-      {/* User Details - Kept for reference, can be removed or restyled */}
-      <section className="mt-12">
-        <h2 className="text-2xl font-semibold text-primary mb-4">Account Details</h2>
-        <Card className="bg-card shadow-lg">
-          <CardContent className="pt-6 text-sm">
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-start">
-                <span className="w-full sm:w-1/3 font-semibold text-muted-foreground sm:pr-2">Email:</span>
-                <span className="w-full sm:w-2/3 text-foreground break-all">{session.user.email || "Not available"}</span>
+        {/* Placeholder Cards Section */}
+        <Suspense fallback={<DashboardSectionSkeleton />}>
+          <DashboardCardsFetcher />
+        </Suspense>
+
+        {/* User Details - Kept for reference, can be removed or restyled */}
+        <section className="mt-12">
+          <h2 className="text-2xl font-semibold text-primary mb-4">Account Details</h2>
+          <Card className="bg-card shadow-lg">
+            <CardContent className="pt-6 text-sm">
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-start">
+                  <span className="w-full sm:w-1/3 font-semibold text-muted-foreground sm:pr-2">Email:</span>
+                  <span className="w-full sm:w-2/3 text-foreground break-all">{session.user?.email || "Not available"}</span>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-start">
+                  <span className="w-full sm:w-1/3 font-semibold text-muted-foreground sm:pr-2">Spotify User ID:</span>
+                  <span className="w-full sm:w-2/3 text-foreground break-all">{session.user?.id || "Not available"}</span>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-start">
+                  <span className="w-full sm:w-1/3 font-semibold text-muted-foreground sm:pr-2">AuraTune Internal ID:</span>
+                  <span className="w-full sm:w-2/3 text-foreground break-all">{session.user?.auratuneInternalId || "Not available"}</span>
+                </div>
               </div>
-              <div className="flex flex-col sm:flex-row sm:items-start">
-                <span className="w-full sm:w-1/3 font-semibold text-muted-foreground sm:pr-2">Spotify User ID:</span>
-                <span className="w-full sm:w-2/3 text-foreground break-all">{session.user.id || "Not available"}</span>
-              </div>
-              <div className="flex flex-col sm:flex-row sm:items-start">
-                <span className="w-full sm:w-1/3 font-semibold text-muted-foreground sm:pr-2">AuraTune Internal ID:</span>
-                <span className="w-full sm:w-2/3 text-foreground break-all">{session.user.auratuneInternalId || "Not available"}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
+            </CardContent>
+          </Card>
+        </section>
 
-      <p className="mt-8 text-center text-sm text-muted-foreground">
-        More features and personalized content coming soon!
-      </p>
-    </div>
-  )
+        <p className="mt-8 text-center text-sm text-muted-foreground">
+          More features and personalized content coming soon!
+        </p>
+      </div>
+    )
+  } catch (error: unknown) {
+    console.error("Error fetching dashboard data:", error)
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>
+            Failed to load dashboard data. Please try again later.
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
 }
 
 // New async component to fetch/render dashboard cards
-async function DashboardCardsFetcher({ session }: { session: any }): Promise<JSX.Element> {
+async function DashboardCardsFetcher(): Promise<JSX.Element> {
   // In a real scenario, if cards depended on async data, you'd fetch it here.
   // For now, we're just rendering the existing card structure.
   // Adding a slight delay to simulate network latency for skeleton visibility:

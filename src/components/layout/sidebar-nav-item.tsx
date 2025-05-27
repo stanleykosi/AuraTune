@@ -11,7 +11,6 @@ import {
   LucideIcon // Keep for type definition of the map values
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion'; // Added framer-motion import
 
 // Map icon names to actual Lucide components
@@ -27,7 +26,7 @@ interface SidebarNavItemProps {
   href: string;
   label: string;
   iconName: string; // Changed from icon: LucideIcon to iconName: string
-  custom?: any; // Added custom prop for framer-motion staggering
+  custom?: number; // Used for framer-motion animation delay
 }
 
 const navItemVariants = {
@@ -45,11 +44,6 @@ export function SidebarNavItem({ href, label, iconName, custom }: SidebarNavItem
   const pathname = usePathname();
   const isActive = pathname === href;
   const Icon = iconComponents[iconName]; // Look up the component from the map
-  const [isClient, setIsClient] = useState(false);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
 
   if (!Icon) {
     // Optional: handle cases where an icon name might not be found
@@ -81,12 +75,7 @@ export function SidebarNavItem({ href, label, iconName, custom }: SidebarNavItem
         aria-current={isActive ? 'page' : undefined}
       >
         <Icon size={20} />
-        {isClient ? (
-          <span className="hidden md:inline">{label}</span>
-        ) : (
-          // Fallback for SSR to avoid layout shift, though isClient makes it client-rendered
-          <span className="hidden md:inline">{label}</span>
-        )}
+        <span className="hidden md:inline">{label}</span>
       </Link>
     </motion.div>
   );

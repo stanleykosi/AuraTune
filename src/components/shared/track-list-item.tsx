@@ -25,78 +25,49 @@
 
 import React from "react"
 import Image from "next/image"
-import type SpotifyWebApi from "spotify-web-api-node"
-import { Music2, Play } from "lucide-react"
+import { Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface TrackListItemProps {
   track: SpotifyApi.TrackObjectFull
-  index: number // For unique key and ARIA attributes
   onPlay?: (track: SpotifyApi.TrackObjectFull) => void
+  showPlayButton?: boolean
+  index?: number
   isPlaying?: boolean
 }
 
-/**
- * Formats milliseconds into a MM:SS string.
- * @param ms - Duration in milliseconds.
- * @returns A string formatted as MM:SS.
- */
-function formatDuration(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000)
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`
-}
-
-export default function TrackListItem({
-  track,
-  index,
-  onPlay,
-  isPlaying,
-}: TrackListItemProps): JSX.Element {
-  const albumArtUrl = track.album?.images?.[0]?.url
-  const trackName = track.name
-  const artists = track.artists?.map((artist) => artist.name).join(", ")
-  const albumName = track.album?.name
-  const duration = track.duration_ms ? formatDuration(track.duration_ms) : "--:--"
+export function TrackListItem({ track, onPlay, showPlayButton = true }: TrackListItemProps) {
+  const handlePlay = () => {
+    if (onPlay) {
+      onPlay(track)
+    }
+  }
 
   return (
-    <div className="flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors group">
-      <div className="relative w-10 h-10 flex-shrink-0">
-        {albumArtUrl ? (
+    <div className="flex items-center justify-between p-2 hover:bg-accent rounded-md">
+      <div className="flex items-center space-x-4">
+        {track.album.images?.[0]?.url && (
           <Image
-            src={albumArtUrl}
-            alt={`Album art for ${albumName || trackName}`}
-            fill
-            className="object-cover rounded"
+            src={track.album.images[0].url}
+            alt={track.album.name}
+            width={48}
+            height={48}
+            className="rounded-md"
           />
-        ) : (
-          <div className="w-full h-full bg-secondary flex items-center justify-center rounded">
-            <Music2 className="h-5 w-5 text-muted-foreground" />
-          </div>
         )}
+        <div>
+          <div className="font-medium">{track.name}</div>
+          <div className="text-sm text-muted-foreground">
+            {track.artists.map(artist => artist.name).join(", ")}
+          </div>
+        </div>
       </div>
-      <div className="flex-grow min-w-0">
-        <p
-          className="text-sm font-medium truncate"
-          title={trackName}
-        >
-          {trackName || "Unknown Track"}
-        </p>
-        <p
-          className="text-xs text-muted-foreground truncate"
-          title={artists}
-        >
-          {artists || "Unknown Artist"}
-        </p>
-      </div>
-      {onPlay && (
+      {showPlayButton && (
         <Button
           variant="ghost"
           size="icon"
-          className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
-          onClick={() => onPlay(track)}
-          aria-label={`Play ${trackName}`}
+          onClick={handlePlay}
+          className="hover:bg-accent"
         >
           <Play className="h-4 w-4" />
         </Button>

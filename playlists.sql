@@ -9,6 +9,6 @@ VALUES
   ('Indie Discovery', 'Fresh tracks from emerging indie artists.', 'lucide:Lightbulb', 'TBD', true, NOW(), NOW()),
   ('Road Trip Anthems', 'Epic songs for long drives and adventures.', 'lucide:Milestone', 'TBD', true, NOW(), NOW()),
   ('Coding Marathon', 'Ambient and electronic music for deep work sessions.', 'lucide:Laptop', 'TBD', true, NOW(), NOW()),
-  ('Soulful Grooves', 'Smooth soul and R&B classics.', 'lucide:Vinyl', 'TBD', true, NOW(), NOW()),
+  ('Soulful Grooves', 'Smooth soul and R&B classics.', 'lucide:Disc', 'TBD', true, NOW(), NOW()),
   ('Jazz Evening', 'Cool jazz for a sophisticated night in.', 'lucide:Wine', 'TBD', true, NOW(), NOW()),
   ('Global Hits', 'Popular tracks from around the world.', 'lucide:Globe', 'TBD', true, NOW(), NOW()); 

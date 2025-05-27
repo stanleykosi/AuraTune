@@ -34,8 +34,9 @@ interface WebPlaybackState {
   repeatMode: 'off' | 'context' | 'track'
 }
 
+type SpotifyPlayerState = Spotify.PlaybackState | { device_id: string } | { message: string }
+
 export function useSpotifyWebPlayback() {
-  const { data: session } = useSession()
   const [player, setPlayer] = useState<Spotify.Player | null>(null)
   const [isReady, setIsReady] = useState(false)
   const [state, setState] = useState<WebPlaybackState>({
@@ -44,9 +45,104 @@ export function useSpotifyWebPlayback() {
     deviceId: null,
     position: 0,
     duration: 0,
-    volume: 50,
+    volume: 0.5,
     repeatMode: 'off'
   })
+
+  const { data: session } = useSession()
+
+  const handleReady = useCallback((state: SpotifyPlayerState) => {
+    if ('device_id' in state) {
+      console.log('Ready with Device ID', state.device_id)
+      setIsReady(true)
+      setState(prev => ({
+        ...prev,
+        deviceId: state.device_id
+      }))
+
+      // Transfer playback to this device
+      const spotifyApi = getSpotifyApi(session?.accessToken as string)
+      if (spotifyApi) {
+        spotifyApi.transferMyPlayback([state.device_id], { play: false })
+          .then(() => console.log('Transferred playback to AuraTune Web Player'))
+          .catch(error => console.error('Failed to transfer playback:', error))
+      }
+    }
+  }, [session?.accessToken])
+
+  const handleNotReady = useCallback((state: SpotifyPlayerState) => {
+    if ('device_id' in state) {
+      console.log('Device ID has gone offline', state.device_id)
+      setIsReady(false)
+    }
+  }, [])
+
+  const handlePlayerStateChanged = useCallback((state: SpotifyPlayerState) => {
+    if (!state || !('track_window' in state)) return
+
+    setState(prev => ({
+      ...prev,
+      isPlaying: !state.paused,
+      currentTrack: state.track_window.current_track ? {
+        id: state.track_window.current_track.id,
+        name: state.track_window.current_track.name,
+        artists: state.track_window.current_track.artists.map((a: { name: string }) => a.name).join(', '),
+        album: {
+          name: state.track_window.current_track.album.name,
+          images: state.track_window.current_track.album.images
+        }
+      } : null,
+      position: state.position,
+      duration: state.duration,
+      volume: state.volume,
+      repeatMode: state.repeat_mode === 0 ? 'off' : state.repeat_mode === 1 ? 'context' : 'track'
+    }))
+  }, [])
+
+  const handlePlaybackError = useCallback((state: SpotifyPlayerState) => {
+    if ('message' in state) {
+      console.error('Playback error:', state.message)
+      toast.error('Playback error occurred')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!session?.accessToken) return
+
+    const script = document.createElement("script")
+    script.src = "https://sdk.scdn.co/spotify-player.js"
+    script.async = true
+
+    document.body.appendChild(script)
+
+    window.onSpotifyWebPlaybackSDKReady = () => {
+      const player = new window.Spotify.Player({
+        name: "AuraTune Web Player",
+        getOAuthToken: (cb) => {
+          cb(session.accessToken as string)
+        },
+        volume: 0.5,
+      })
+
+      setPlayer(player)
+
+      player.addListener("ready", handleReady)
+      player.addListener("not_ready", handleNotReady)
+      player.addListener("player_state_changed", handlePlayerStateChanged)
+      player.addListener("initialization_error", handlePlaybackError)
+      player.addListener("authentication_error", handlePlaybackError)
+      player.addListener("account_error", handlePlaybackError)
+      player.addListener("playback_error", handlePlaybackError)
+
+      player.connect()
+    }
+
+    return () => {
+      if (script.parentNode) {
+        script.parentNode.removeChild(script)
+      }
+    }
+  }, [session?.accessToken, handleReady, handleNotReady, handlePlayerStateChanged, handlePlaybackError])
 
   // Add progress update effect
   useEffect(() => {
@@ -73,116 +169,6 @@ export function useSpotifyWebPlayback() {
       }
     }
   }, [state.isPlaying, state.duration])
-
-  // Initialize the player
-  useEffect(() => {
-    if (!session?.accessToken) return
-
-    const script = document.createElement('script')
-    script.src = 'https://sdk.scdn.co/spotify-player.js'
-    script.async = true
-
-    document.body.appendChild(script)
-
-    window.onSpotifyWebPlaybackSDKReady = () => {
-      const playerInstance = new window.Spotify.Player({
-        name: 'AuraTune Web Player',
-        getOAuthToken: cb => cb(session.accessToken as string),
-        volume: 0.5
-      })
-
-      // Error handling
-      playerInstance.addListener('initialization_error', ({ message }) => {
-        console.error('Failed to initialize:', message)
-        toast.error('Failed to initialize Spotify player')
-        setIsReady(false)
-      })
-
-      playerInstance.addListener('authentication_error', ({ message }) => {
-        console.error('Failed to authenticate:', message)
-        toast.error('Failed to authenticate with Spotify')
-        setIsReady(false)
-      })
-
-      playerInstance.addListener('account_error', ({ message }) => {
-        console.error('Failed to validate Spotify account:', message)
-        toast.error('Spotify Premium Required', {
-          description: 'The Web Playback SDK is only available for Spotify Premium users.',
-          duration: 10000,
-          action: {
-            label: 'Upgrade to Premium',
-            onClick: () => window.open('https://www.spotify.com/premium/', '_blank')
-          }
-        })
-        setIsReady(false)
-      })
-
-      playerInstance.addListener('playback_error', ({ message }) => {
-        console.error('Failed to perform playback:', message)
-        toast.error('Playback error occurred')
-      })
-
-      // Playback status updates
-      playerInstance.addListener('player_state_changed', state => {
-        if (!state) return
-
-        setState(prev => ({
-          ...prev,
-          isPlaying: !state.paused,
-          currentTrack: state.track_window.current_track ? {
-            id: state.track_window.current_track.id,
-            name: state.track_window.current_track.name,
-            artists: state.track_window.current_track.artists.map(a => a.name).join(', '),
-            album: {
-              name: state.track_window.current_track.album.name,
-              images: state.track_window.current_track.album.images
-            }
-          } : null,
-          deviceId: state.device_id,
-          position: state.position,
-          duration: state.duration,
-          volume: state.volume,
-          repeatMode: state.repeat_mode
-        }))
-      })
-
-      // Ready
-      playerInstance.addListener('ready', async ({ device_id }) => {
-        console.log('Ready with Device ID', device_id)
-        setIsReady(true)
-        setPlayer(playerInstance)
-
-        try {
-          const spotifyApi = getSpotifyApi(session.accessToken)
-          if (spotifyApi) {
-            // Transfer playback to this device
-            await spotifyApi.transferMyPlayback([device_id], { play: false })
-            console.log('Transferred playback to AuraTune Web Player')
-          }
-        } catch (error) {
-          console.error('Failed to transfer playback:', error)
-        }
-      })
-
-      // Not Ready
-      playerInstance.addListener('not_ready', ({ device_id }) => {
-        console.log('Device ID has gone offline', device_id)
-        setIsReady(false)
-      })
-
-      // Connect to the player!
-      playerInstance.connect()
-    }
-
-    return () => {
-      if (player) {
-        player.disconnect()
-      }
-      if (script.parentNode) {
-        script.parentNode.removeChild(script)
-      }
-    }
-  }, [session?.accessToken])
 
   // Playback controls
   const play = useCallback(async (trackUri?: string) => {
@@ -349,6 +335,34 @@ export function useSpotifyWebPlayback() {
       toast.error("Failed to set repeat mode")
     }
   }, [player, isReady, session?.accessToken, state.deviceId])
+
+  useEffect(() => {
+    if (player) {
+      player.addListener('player_state_changed', handlePlayerStateChanged)
+      player.addListener('ready', handleReady)
+      player.addListener('not_ready', handleNotReady)
+      player.addListener('initialization_error', handlePlaybackError)
+      player.addListener('authentication_error', handlePlaybackError)
+      player.addListener('account_error', handlePlaybackError)
+      player.addListener('playback_error', handlePlaybackError)
+
+      return () => {
+        player.removeListener('player_state_changed', handlePlayerStateChanged)
+        player.removeListener('ready', handleReady)
+        player.removeListener('not_ready', handleNotReady)
+        player.removeListener('initialization_error', handlePlaybackError)
+        player.removeListener('authentication_error', handlePlaybackError)
+        player.removeListener('account_error', handlePlaybackError)
+        player.removeListener('playback_error', handlePlaybackError)
+      }
+    }
+  }, [
+    player,
+    handlePlayerStateChanged,
+    handleReady,
+    handleNotReady,
+    handlePlaybackError
+  ])
 
   return {
     isReady,

@@ -75,8 +75,6 @@ export function getSpotifyApi(accessToken: string | undefined): SpotifyWebApi | 
     // For user-specific requests, only the access token is required.
     // clientId: process.env.SPOTIFY_CLIENT_ID, // Not strictly necessary for user-authenticated calls
     // clientSecret: process.env.SPOTIFY_CLIENT_SECRET, // Not strictly necessary for user-authenticated calls
-    // Set a longer timeout (30 seconds) to handle slower network conditions
-    requestTimeout: 30000, // 30 seconds in milliseconds
   })
 
   spotifyApi.setAccessToken(accessToken)

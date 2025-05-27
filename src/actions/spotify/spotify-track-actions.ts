@@ -23,9 +23,18 @@
  */
 "use server"
 
-import type SpotifyWebApi from "spotify-web-api-node"
 import { getSpotifyApi } from "@/lib/spotify-sdk"
 import { ActionState } from "@/types"
+
+interface SpotifyApiError {
+  body?: {
+    error?: {
+      message?: string;
+    };
+  };
+  message?: string;
+  statusCode?: number;
+}
 
 /**
  * Fetches detailed information for a single track from Spotify using its ID.
@@ -86,15 +95,16 @@ export async function getSpotifyTrackDetailsAction(
         message: `Failed to retrieve track details. Status: ${response.statusCode}.`,
       }
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error(`Error fetching track details for ID ${trackId} from Spotify:`, error)
+    const spotifyError = error as SpotifyApiError
     const errorMessage =
-      error.body?.error?.message ||
-      error.message ||
+      spotifyError.body?.error?.message ||
+      spotifyError.message ||
       `An unexpected error occurred while fetching track details from Spotify.`
 
-    if (error.statusCode === 404) {
-       return {
+    if (spotifyError.statusCode === 404) {
+      return {
         isSuccess: false,
         message: `Track with ID "${trackId}" not found on Spotify. API error: ${errorMessage}`,
       }

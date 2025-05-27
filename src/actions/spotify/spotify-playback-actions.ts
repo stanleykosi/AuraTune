@@ -38,13 +38,38 @@ import { getSpotifyApi } from "@/lib/spotify-sdk"
 import { ActionState } from "@/types"
 import type SpotifyWebApi from "spotify-web-api-node"
 
+interface SpotifyApiError {
+  body?: {
+    error?: {
+      reason?: string;
+      message?: string;
+    };
+  };
+  message?: string;
+  code?: string;
+  statusCode?: number;
+}
+
+interface SpotifyApiResponse<T> {
+  body: T;
+  statusCode: number;
+}
+
+interface SpotifyApiTrack {
+  id: string;
+  name: string;
+  artists: Array<{ name: string }>;
+  explicit: boolean;
+  uri: string;
+}
+
 /**
  * Helper function to handle common Spotify API call errors and return ActionState.
  * @param error - The error object caught from the API call.
  * @param actionName - Name of the action for logging.
  * @returns ActionState indicating failure.
  */
-function handleSpotifyApiError(error: any, actionName: string): ActionState<never> {
+function handleSpotifyApiError(error: SpotifyApiError, actionName: string): ActionState<never> {
   console.error(`Error in ${actionName}:`, error)
   let message = `An unexpected error occurred in ${actionName}.`
   if (error.body?.error?.reason === "NO_ACTIVE_DEVICE") {
@@ -63,26 +88,27 @@ function handleSpotifyApiError(error: any, actionName: string): ActionState<neve
  * Helper function to retry API calls with exponential backoff
  */
 async function retryWithBackoff<T>(
-  fn: () => Promise<T>,
+  fn: () => Promise<SpotifyApiResponse<T>>,
   maxRetries: number = 3,
   initialDelay: number = 1000
-): Promise<T> {
-  let lastError: any
+): Promise<SpotifyApiResponse<T>> {
+  let lastError: SpotifyApiError
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await fn()
-    } catch (error: any) {
-      lastError = error
-      if (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED') {
-        const delayMs = initialDelay * Math.pow(2, i) // Exponential backoff
+    } catch (error: unknown) {
+      const spotifyError = error as SpotifyApiError
+      lastError = spotifyError
+      if (spotifyError.code === 'ETIMEDOUT' || spotifyError.code === 'ECONNRESET' || spotifyError.code === 'ECONNREFUSED') {
+        const delayMs = initialDelay * Math.pow(2, i)
         console.log(`Retry attempt ${i + 1}/${maxRetries} after ${delayMs}ms delay`)
         await new Promise(resolve => setTimeout(resolve, delayMs))
         continue
       }
-      throw error // If it's not a network error, throw immediately
+      throw error
     }
   }
-  throw lastError
+  throw lastError!
 }
 
 /**
@@ -93,7 +119,7 @@ async function findExplicitVersion(
   trackName: string,
   artistName: string,
   market: string = 'US'
-): Promise<SpotifyApi.TrackObjectFull | undefined> {
+): Promise<SpotifyApiTrack | undefined> {
   try {
     const searchQuery = `${trackName} ${artistName} explicit`
     const searchResults = await retryWithBackoff(() =>
@@ -144,8 +170,8 @@ export async function getCurrentPlaybackStateAction(): Promise<
       message: "Playback state retrieved successfully.",
       data: response.body,
     }
-  } catch (error: any) {
-    return handleSpotifyApiError(error, "getCurrentPlaybackStateAction")
+  } catch (error: unknown) {
+    return handleSpotifyApiError(error as SpotifyApiError, "getCurrentPlaybackStateAction")
   }
 }
 
@@ -299,8 +325,8 @@ export async function togglePlayPauseAction(): Promise<ActionState<{ isPlaying: 
         data: { isPlaying: true },
       }
     }
-  } catch (error: any) {
-    return handleSpotifyApiError(error, "togglePlayPauseAction")
+  } catch (error: unknown) {
+    return handleSpotifyApiError(error as SpotifyApiError, "togglePlayPauseAction")
   }
 }
 
@@ -326,7 +352,6 @@ export async function nextTrackAction(): Promise<ActionState<void>> {
     // Get current playback state
     const playbackState = await spotifyApi.getMyCurrentPlaybackState()
     const currentDevice = playbackState.body?.device
-    const isPlaying = playbackState.body?.is_playing
 
     if (!currentDevice?.id) {
       return { isSuccess: false, message: "No active device found. Please start playback first." }
@@ -346,27 +371,25 @@ export async function nextTrackAction(): Promise<ActionState<void>> {
       // If the track is not explicit, try to find the explicit version
       if (!trackDetails.body.explicit) {
         const searchQuery = `${trackDetails.body.name} ${trackDetails.body.artists[0].name} explicit`
-        const searchResults = await spotifyApi.searchTracks(searchQuery, { limit: 5, market: 'US' })
-        const explicitVersion = searchResults.body.tracks?.items.find(track => track.explicit)
+        const searchResults = await spotifyApi.searchTracks(searchQuery, { limit: 1, market: 'US' })
+        const explicitTrack = searchResults.body.tracks?.items[0]
 
-        if (explicitVersion) {
-          // Play the explicit version instead
+        if (explicitTrack && explicitTrack.explicit) {
           await spotifyApi.play({
             device_id: currentDevice.id,
-            uris: [explicitVersion.uri]
+            uris: [explicitTrack.uri]
           })
         }
       }
     }
 
-    // Resume playback if it was playing
-    if (isPlaying) {
-      await spotifyApi.play({ device_id: currentDevice.id })
+    return {
+      isSuccess: true,
+      message: "Skipped to next track successfully.",
+      data: undefined
     }
-
-    return { isSuccess: true, message: "Skipped to next track.", data: undefined }
-  } catch (error: any) {
-    return handleSpotifyApiError(error, "nextTrackAction")
+  } catch (error: unknown) {
+    return handleSpotifyApiError(error as SpotifyApiError, "nextTrackAction")
   }
 }
 
@@ -392,7 +415,6 @@ export async function previousTrackAction(): Promise<ActionState<void>> {
     // Get current playback state
     const playbackState = await spotifyApi.getMyCurrentPlaybackState()
     const currentDevice = playbackState.body?.device
-    const isPlaying = playbackState.body?.is_playing
 
     if (!currentDevice?.id) {
       return { isSuccess: false, message: "No active device found. Please start playback first." }
@@ -412,46 +434,40 @@ export async function previousTrackAction(): Promise<ActionState<void>> {
       // If the track is not explicit, try to find the explicit version
       if (!trackDetails.body.explicit) {
         const searchQuery = `${trackDetails.body.name} ${trackDetails.body.artists[0].name} explicit`
-        const searchResults = await spotifyApi.searchTracks(searchQuery, { limit: 5, market: 'US' })
-        const explicitVersion = searchResults.body.tracks?.items.find(track => track.explicit)
+        const searchResults = await spotifyApi.searchTracks(searchQuery, { limit: 1, market: 'US' })
+        const explicitTrack = searchResults.body.tracks?.items[0]
 
-        if (explicitVersion) {
-          // Play the explicit version instead
+        if (explicitTrack && explicitTrack.explicit) {
           await spotifyApi.play({
             device_id: currentDevice.id,
-            uris: [explicitVersion.uri]
+            uris: [explicitTrack.uri]
           })
         }
       }
     }
 
-    // Resume playback if it was playing
-    if (isPlaying) {
-      await spotifyApi.play({ device_id: currentDevice.id })
+    return {
+      isSuccess: true,
+      message: "Skipped to previous track successfully.",
+      data: undefined
     }
-
-    return { isSuccess: true, message: "Skipped to previous track.", data: undefined }
-  } catch (error: any) {
-    return handleSpotifyApiError(error, "previousTrackAction")
+  } catch (error: unknown) {
+    return handleSpotifyApiError(error as SpotifyApiError, "previousTrackAction")
   }
 }
 
 /**
  * Sets the playback volume on Spotify.
  *
- * @param volumePercent - The desired volume percentage (0-100).
+ * @param volume - The desired volume level (0-100).
  * @returns A Promise resolving to an `ActionState<void>`.
  *          On success, indicates the command was sent.
  *          On failure, `isSuccess` is false, and `message` describes the error.
  */
-export async function setVolumeAction(volumePercent: number): Promise<ActionState<void>> {
+export async function setVolumeAction(volume: number): Promise<ActionState<void>> {
   const session = await getServerSession(authOptions)
   if (!session?.accessToken) {
     return { isSuccess: false, message: "User not authenticated." }
-  }
-
-  if (volumePercent < 0 || volumePercent > 100) {
-    return { isSuccess: false, message: "Volume must be between 0 and 100." }
   }
 
   const spotifyApi = getSpotifyApi(session.accessToken)
@@ -460,22 +476,33 @@ export async function setVolumeAction(volumePercent: number): Promise<ActionStat
   }
 
   try {
-    await spotifyApi.setVolume(volumePercent)
-    return { isSuccess: true, message: `Volume set to ${volumePercent}%.`, data: undefined }
-  } catch (error: any) {
-    return handleSpotifyApiError(error, "setVolumeAction")
+    // Validate volume range
+    if (volume < 0 || volume > 100) {
+      return { isSuccess: false, message: "Volume must be between 0 and 100." }
+    }
+
+    // Set volume
+    await spotifyApi.setVolume(volume)
+
+    return {
+      isSuccess: true,
+      message: "Volume set successfully.",
+      data: undefined
+    }
+  } catch (error: unknown) {
+    return handleSpotifyApiError(error as SpotifyApiError, "setVolumeAction")
   }
 }
 
 /**
- * Toggles shuffle mode on Spotify.
+ * Toggles the shuffle mode on Spotify.
  *
- * @param shuffleState - The desired shuffle state (true for on, false for off).
+ * @param desiredState - The desired shuffle state (true for on, false for off).
  * @returns A Promise resolving to an `ActionState<void>`.
  *          On success, indicates the command was sent.
  *          On failure, `isSuccess` is false, and `message` describes the error.
  */
-export async function toggleShuffleAction(shuffleState: boolean): Promise<ActionState<void>> {
+export async function toggleShuffleAction(desiredState?: boolean): Promise<ActionState<void>> {
   const session = await getServerSession(authOptions)
   if (!session?.accessToken) {
     return { isSuccess: false, message: "User not authenticated." }
@@ -487,39 +514,34 @@ export async function toggleShuffleAction(shuffleState: boolean): Promise<Action
   }
 
   try {
-    await spotifyApi.setShuffle(shuffleState)
+    // If desiredState is provided, use it directly, otherwise toggle current state
+    const currentShuffleState = await spotifyApi.getMyCurrentPlaybackState()
+    const isShuffled = desiredState ?? !currentShuffleState.body?.shuffle_state
+
+    await spotifyApi.setShuffle(isShuffled)
+
     return {
       isSuccess: true,
-      message: `Shuffle mode ${shuffleState ? "enabled" : "disabled"}.`,
+      message: `Shuffle mode set to ${isShuffled ? 'on' : 'off'}.`,
       data: undefined
     }
-  } catch (error: any) {
-    return handleSpotifyApiError(error, "toggleShuffleAction")
+  } catch (error: unknown) {
+    return handleSpotifyApiError(error as SpotifyApiError, "toggleShuffleAction")
   }
 }
 
 /**
  * Sets the repeat mode on Spotify.
  *
- * @param repeatState - The desired repeat state ('track', 'context', or 'off').
+ * @param repeatMode - The desired repeat mode ('off', 'track', 'context').
  * @returns A Promise resolving to an `ActionState<void>`.
  *          On success, indicates the command was sent.
  *          On failure, `isSuccess` is false, and `message` describes the error.
  */
-export async function setRepeatModeAction(
-  repeatState: "track" | "context" | "off"
-): Promise<ActionState<void>> {
+export async function setRepeatModeAction(repeatMode: string): Promise<ActionState<void>> {
   const session = await getServerSession(authOptions)
   if (!session?.accessToken) {
     return { isSuccess: false, message: "User not authenticated." }
-  }
-
-  const validRepeatStates = ["track", "context", "off"] as const
-  if (!validRepeatStates.includes(repeatState)) {
-    return {
-      isSuccess: false,
-      message: "Invalid repeat state. Must be 'track', 'context', or 'off'.",
-    }
   }
 
   const spotifyApi = getSpotifyApi(session.accessToken)
@@ -528,15 +550,26 @@ export async function setRepeatModeAction(
   }
 
   try {
-    await spotifyApi.setRepeat(repeatState)
-    return { isSuccess: true, message: `Repeat mode set to ${repeatState}.`, data: undefined }
-  } catch (error: any) {
-    return handleSpotifyApiError(error, "setRepeatModeAction")
+    // Validate repeat mode
+    if (!['off', 'track', 'context'].includes(repeatMode)) {
+      return { isSuccess: false, message: "Invalid repeat mode. Must be 'off', 'track', or 'context'." }
+    }
+
+    // Set repeat mode
+    await spotifyApi.setRepeat(repeatMode as "track" | "context" | "off")
+
+    return {
+      isSuccess: true,
+      message: `Repeat mode set to ${repeatMode}.`,
+      data: undefined
+    }
+  } catch (error: unknown) {
+    return handleSpotifyApiError(error as SpotifyApiError, "setRepeatModeAction")
   }
 }
 
 /**
- * Seeks to a specific position in the currently playing track on Spotify.
+ * Seeks to a specific position in the current track.
  *
  * @param positionMs - The position in milliseconds to seek to.
  * @returns A Promise resolving to an `ActionState<void>`.
@@ -549,19 +582,26 @@ export async function seekToPositionAction(positionMs: number): Promise<ActionSt
     return { isSuccess: false, message: "User not authenticated." }
   }
 
-  if (positionMs < 0) {
-    return { isSuccess: false, message: "Position must be a non-negative number." }
-  }
-
   const spotifyApi = getSpotifyApi(session.accessToken)
   if (!spotifyApi) {
     return { isSuccess: false, message: "Failed to initialize Spotify API client." }
   }
 
   try {
+    // Validate position
+    if (positionMs < 0 || positionMs > 100000) {
+      return { isSuccess: false, message: "Position must be between 0 and 100000 milliseconds." }
+    }
+
+    // Seek to position
     await spotifyApi.seek(positionMs)
-    return { isSuccess: true, message: `Seeked to position ${positionMs}ms.`, data: undefined }
-  } catch (error: any) {
-    return handleSpotifyApiError(error, "seekToPositionAction")
+
+    return {
+      isSuccess: true,
+      message: "Seeked to position successfully.",
+      data: undefined
+    }
+  } catch (error: unknown) {
+    return handleSpotifyApiError(error as SpotifyApiError, "seekToPositionAction")
   }
 }

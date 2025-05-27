@@ -10,7 +10,7 @@ interface CacheEntry<T> {
 
 class SpotifyCache {
   private static instance: SpotifyCache;
-  private cache: Map<string, CacheEntry<any>>;
+  private cache: Map<string, CacheEntry<unknown>>;
   private readonly CACHE_DURATION = 1000 * 60 * 60; // 1 hour
 
   private constructor() {

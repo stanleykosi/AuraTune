@@ -22,9 +22,17 @@
  */
 "use server"
 
-import type SpotifyWebApi from "spotify-web-api-node"
 import { getSpotifyApi } from "@/lib/spotify-sdk"
 import { ActionState } from "@/types"
+
+interface SpotifyApiError {
+  body?: {
+    error?: {
+      message?: string;
+    };
+  };
+  message?: string;
+}
 
 // Define allowed time ranges for Spotify API
 type SpotifyTimeRange = "short_term" | "medium_term" | "long_term"
@@ -119,15 +127,16 @@ export async function getSpotifyUserTopItemsAction(
         data: response.body.items,
       }
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error(
       `Error fetching top ${type} from Spotify for time range ${timeRange}:`,
       error
     )
     // Handle specific Spotify API error structures if available
+    const spotifyError = error as SpotifyApiError
     const errorMessage =
-      error.body?.error?.message ||
-      error.message ||
+      spotifyError.body?.error?.message ||
+      spotifyError.message ||
       `An unexpected error occurred while fetching top ${type} from Spotify.`
     return {
       isSuccess: false,

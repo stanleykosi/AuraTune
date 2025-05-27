@@ -23,9 +23,20 @@
  */
 "use server"
 
-import type SpotifyWebApi from "spotify-web-api-node"
 import { getSpotifyApi } from "@/lib/spotify-sdk"
 import { ActionState, OpenRouterTrackSuggestion } from "@/types"
+
+interface SpotifyApiError {
+  body?: {
+    error?: {
+      message?: string;
+      reason?: string;
+    };
+  };
+  message?: string;
+  code?: string;
+  statusCode?: number;
+}
 
 /**
  * Searches for tracks on Spotify based on a query string.
@@ -86,11 +97,12 @@ export async function searchSpotifyTracksAction(
         data: [],
       }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error searching Spotify tracks:", error)
+    const spotifyError = error as SpotifyApiError
     const errorMessage =
-      error.body?.error?.message ||
-      error.message ||
+      spotifyError.body?.error?.message ||
+      spotifyError.message ||
       "An unexpected error occurred while searching tracks on Spotify."
     return {
       isSuccess: false,
@@ -148,13 +160,14 @@ export async function validateSpotifyTracksAction(
     maxRetries: number = 3,
     initialDelay: number = 1000
   ): Promise<T> => {
-    let lastError: any
+    let lastError: SpotifyApiError
     for (let i = 0; i < maxRetries; i++) {
       try {
         return await fn()
-      } catch (error: any) {
-        lastError = error
-        if (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED') {
+      } catch (error: unknown) {
+        const spotifyError = error as SpotifyApiError
+        lastError = spotifyError
+        if (spotifyError.code === 'ETIMEDOUT' || spotifyError.code === 'ECONNRESET' || spotifyError.code === 'ECONNREFUSED') {
           const delayMs = initialDelay * Math.pow(2, i) // Exponential backoff
           console.log(`Retry attempt ${i + 1}/${maxRetries} after ${delayMs}ms delay`)
           await delay(delayMs)
@@ -163,7 +176,7 @@ export async function validateSpotifyTracksAction(
         throw error // If it's not a network error, throw immediately
       }
     }
-    throw lastError
+    throw lastError!
   }
 
   try {
@@ -220,8 +233,9 @@ export async function validateSpotifyTracksAction(
 
         // Add a small delay between processing each track to avoid rate limiting
         await delay(200)
-      } catch (error: any) {
-        console.error(`Error processing track "${cleanTrackName}" by "${cleanArtistName}":`, error)
+      } catch (error: unknown) {
+        const spotifyError = error as SpotifyApiError
+        console.error(`Error processing track "${cleanTrackName}" by "${cleanArtistName}":`, spotifyError)
         // Continue with next track instead of failing the entire validation
         continue
       }
@@ -232,11 +246,12 @@ export async function validateSpotifyTracksAction(
       message: `Track validation completed. Found ${validatedTracks.length} unique valid tracks.`,
       data: validatedTracks,
     }
-  } catch (error: any) {
-    console.error("Error during Spotify track validation process:", error)
+  } catch (error: unknown) {
+    const spotifyError = error as SpotifyApiError
+    console.error("Error during Spotify track validation process:", spotifyError)
     const errorMessage =
-      error.body?.error?.message ||
-      error.message ||
+      spotifyError.body?.error?.message ||
+      spotifyError.message ||
       "An unexpected error occurred during track validation."
     return {
       isSuccess: false,
@@ -334,12 +349,13 @@ export async function createSpotifyPlaylistAction(
           `Failed to create playlist on Spotify. Status: ${response.statusCode}.`
       }
     }
-  } catch (error: any) {
-    console.error("Error creating Spotify playlist:", error)
+  } catch (error: unknown) {
+    const spotifyError = error as SpotifyApiError
+    console.error("Error creating Spotify playlist:", spotifyError)
     const errorMessage =
-      error.body?.error?.message ||
-      error.message ||
-      "An unexpected error occurred while creating the playlist on Spotify."
+      spotifyError.body?.error?.message ||
+      spotifyError.message ||
+      "An unexpected error occurred while creating the playlist."
     return {
       isSuccess: false,
       message: errorMessage,
@@ -414,11 +430,12 @@ export async function addTracksToSpotifyPlaylistAction(
         message: `Failed to add tracks to playlist. Status: ${response.statusCode}.`,
       }
     }
-  } catch (error: any) {
-    console.error("Error adding tracks to Spotify playlist:", error)
+  } catch (error: unknown) {
+    const spotifyError = error as SpotifyApiError
+    console.error("Error adding tracks to Spotify playlist:", spotifyError)
     const errorMessage =
-      error.body?.error?.message ||
-      error.message ||
+      spotifyError.body?.error?.message ||
+      spotifyError.message ||
       "An unexpected error occurred while adding tracks to the playlist."
     return {
       isSuccess: false,

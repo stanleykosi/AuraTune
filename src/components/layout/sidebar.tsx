@@ -28,95 +28,26 @@
 "use client"
 
 import React from "react"
-import Link from "next/link"
-import Image from "next/image"
-import { motion } from "framer-motion";
-import {
-  LayoutDashboard,
-  Sparkles, // Used for Curated Templates
-  ListMusic, // Using for Track Match
-  BarChart3,
-  Settings,
-  // LucideIcon, // No longer needed here for NavItem type
-  // LogOut icon is not strictly needed here anymore if AuthButton handles its own icon
-} from "lucide-react"
-// import AuthButton from "@/components/shared/auth-button" // Removed AuthButton import from here
-import { SidebarNavItem } from "./sidebar-nav-item"; // Import the new component
-
-// Define a type for navigation items for better structure and maintainability
-interface NavItem {
-  href: string
-  label: string
-  iconName: string // Changed from icon: LucideIcon to iconName: string
-}
-
-const navItems: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard" },
-  {
-    href: "/generate/curated",
-    label: "Curated Templates",
-    iconName: "Sparkles",
-  },
-  {
-    href: "/generate/track-match",
-    label: "Track Match",
-    iconName: "ListMusic",
-  }, // New item for Track Match
-  { href: "/analytics", label: "Analytics", iconName: "BarChart3" },
-  { href: "/settings", label: "Settings", iconName: "Settings" },
-]
+import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { SidebarNav } from "./sidebar-nav"
 
 /**
  * Sidebar component.
  * Renders the application's navigation sidebar with links and icons.
- * @returns {Promise<JSX.Element>} The JSX for the sidebar.
+ * @returns {JSX.Element} The JSX for the sidebar.
  */
 export default function Sidebar(): JSX.Element {
-  const navContainerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.07, // Adjust delay between items if needed
-      },
-    },
-  };
-
   return (
-    <aside className="flex flex-col bg-card text-card-foreground border-r border-border p-4 h-full shrink-0 md:w-64 transition-all duration-300 ease-in-out w-20 md:items-start items-center">
-      <div className="flex items-center gap-2 text-2xl font-semibold text-primary mb-8 pt-2">
-        <Image
-          src="/auratune-logo-placeholder.svg"
-          alt="AuraTune Logo"
-          width={32}
-          height={32}
-          className="h-8 w-8"
-        />
-        <span className="hidden md:inline">AuraTune</span>
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex h-[52px] items-center justify-center">
+        <Button variant="ghost" className="w-full justify-start">
+          <span className="text-lg font-semibold">AuraTune</span>
+        </Button>
       </div>
-
-      <motion.nav
-        className="flex flex-col space-y-1 w-full"
-        variants={navContainerVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        {navItems.map((item, index) => (
-          <SidebarNavItem
-            key={item.label}
-            href={item.href}
-            label={item.label}
-            iconName={item.iconName}
-            custom={index}
-          />
-        ))}
-      </motion.nav>
-
-      {/* Copyright notice pushed to bottom and aligned */}
-      <div className="mt-auto w-full text-xs text-muted-foreground pb-2 text-center md:text-left pt-4">
-        <p className="hidden md:block">© {new Date().getFullYear()} AuraTune</p>
-        <p className="md:hidden">©{new Date().getFullYear()}</p>
-      </div>
-    </aside>
+      <ScrollArea className="flex-1 px-2">
+        <SidebarNav />
+      </ScrollArea>
+    </div>
   )
 }

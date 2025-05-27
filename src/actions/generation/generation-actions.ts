@@ -48,8 +48,7 @@ import {
   createSpotifyPlaylistAction,
   addTracksToSpotifyPlaylistAction,
 } from "@/actions/spotify/spotify-playlist-actions"
-import { getSpotifyTrackDetailsAction } from "@/actions/spotify/spotify-track-actions" // New import
-import type SpotifyWebApi from "spotify-web-api-node"
+import { getSpotifyTrackDetailsAction } from "@/actions/spotify/spotify-track-actions"
 import { playlistGenerationMethodEnum } from "@/db/schema/playlists-schema"
 import fs from "fs/promises" // For reading prompt files
 import path from "path" // For constructing file paths
@@ -322,7 +321,7 @@ Focus on musical similarity to this seed song.`
 
     // 8. Check if enough valid tracks were found
     if (validatedTracks.length < MINIMUM_VALID_TRACKS) {
-       let message = `Could not find enough valid tracks similar to "${seedTrack.name}". Only ${validatedTracks.length} tracks were found (minimum ${MINIMUM_VALID_TRACKS} required).`;
+      let message = `Could not find enough valid tracks similar to "${seedTrack.name}". Only ${validatedTracks.length} tracks were found (minimum ${MINIMUM_VALID_TRACKS} required).`;
       if (validatedTracks.length > 0) {
         message += " You can try saving these, or regenerate with a different seed song."
       } else {
@@ -333,7 +332,7 @@ Focus on musical similarity to this seed song.`
         message: message,
       };
     }
-     if (validatedTracks.length < trackCount) {
+    if (validatedTracks.length < trackCount) {
       console.warn(`AuraTune: Requested ${trackCount} tracks, but only ${validatedTracks.length} were validated on Spotify for seed track "${seedTrack.name}".`);
     }
 

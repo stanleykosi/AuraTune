@@ -31,8 +31,7 @@
  */
 "use client"
 
-import React, { useState, useEffect, useCallback } from "react"
-import Image from "next/image"
+import React, { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Play,
@@ -41,15 +40,12 @@ import {
   SkipBack,
   Volume2,
   VolumeX,
-  Shuffle,
   Music2,
   Loader2,
-  AlertCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { useSpotifyPlayerSync } from "@/lib/hooks/use-spotify-player-sync"
 import { useSpotifyWebPlayback } from "@/lib/hooks/use-spotify-web-playback"
 
 /**

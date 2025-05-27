@@ -34,10 +34,10 @@
  *   `session.user.id` remains the Spotify User ID.
  */
 
-import NextAuth, { NextAuthOptions, Account, Profile, User } from "next-auth"
+import NextAuth, { NextAuthOptions, Account, Profile, User, Session } from "next-auth"
 import { AdapterUser } from "next-auth/adapters"
 import { JWT } from "next-auth/jwt"
-import SpotifyProvider, { SpotifyProfile } from "next-auth/providers/spotify"
+import SpotifyProvider from "next-auth/providers/spotify"
 import { upsertUserAction } from "@/actions/db/users-actions"
 import { createDefaultUserSettingsAction } from "@/actions/db/user-settings-actions"
 import { SelectUser } from "@/db/schema/users-schema"
@@ -68,6 +68,29 @@ const SPOTIFY_SCOPES = [
   "user-read-currently-playing",
   "streaming"  // Required for Web Playback SDK
 ].join(",")
+
+interface ExtendedSpotifyProfile extends Profile {
+  id: string;
+  display_name: string;
+  email: string;
+  images?: Array<{ url: string }>;
+}
+
+interface ExtendedUser extends User {
+  auratuneInternalId?: string;
+}
+
+interface ExtendedSession extends Session {
+  accessToken?: string;
+  error?: string;
+  user?: {
+    id?: string;
+    auratuneInternalId?: string;
+    name?: string;
+    email?: string;
+    image?: string;
+  };
+}
 
 /**
  * Takes a token, and returns a new token with updated
@@ -130,9 +153,9 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
   },
   callbacks: {
-    async signIn({ user, account, profile }: { user: User | AdapterUser; account: Account | null; profile?: Profile | SpotifyProfile | null }): Promise<boolean | string> {
+    async signIn({ user, account, profile }: { user: User | AdapterUser; account: Account | null; profile?: Profile | ExtendedSpotifyProfile | null }): Promise<boolean | string> {
       if (account?.provider === "spotify" && profile && user) {
-        const spotifyProfile = profile as SpotifyProfile
+        const spotifyProfile = profile as ExtendedSpotifyProfile
         try {
           // Upsert user in AuraTune database
           const userUpsertResult = await upsertUserAction({
@@ -147,17 +170,13 @@ export const authOptions: NextAuthOptions = {
               "Failed to upsert user during signIn:",
               userUpsertResult.message
             )
-            // Potentially block sign-in if user persistence is critical
-            // For now, allow sign-in but log the error. Consider returning an error page URL.
-            // return '/auth/error?error=UserDbOperationFailed';
             return true; // Or `false` to block sign-in
           }
 
           const auratuneUser = userUpsertResult.data as SelectUser
 
           // Augment the `user` object passed to the JWT callback with AuraTune's internal ID
-          // This makes `auratuneUser.id` (our DB UUID) available in the jwt callback.
-          (user as any).auratuneInternalId = auratuneUser.id
+          (user as ExtendedUser).auratuneInternalId = auratuneUser.id
 
           // Create or verify default user settings
           const settingsResult = await createDefaultUserSettingsAction(
@@ -169,8 +188,6 @@ export const authOptions: NextAuthOptions = {
               `Failed to create/verify default user settings for AuraTune user ${auratuneUser.id}:`,
               settingsResult.message
             )
-            // Settings creation failure might not be critical enough to block sign-in,
-            // but should be logged and monitored.
           }
 
           return true // Sign-in successful, proceed to JWT callback
@@ -179,14 +196,13 @@ export const authOptions: NextAuthOptions = {
           return false // Block sign-in on unexpected error
         }
       }
-      // Allow sign-in for other scenarios or if not Spotify (though only Spotify is configured)
       return true
     },
 
-    async jwt({ token, user, account, profile }: { token: JWT; user?: User | AdapterUser | any; account?: Account | null; profile?: Profile | SpotifyProfile | null }): Promise<JWT> {
+    async jwt({ token, user, account, profile }: { token: JWT; user?: ExtendedUser; account?: Account | null; profile?: Profile | ExtendedSpotifyProfile | null }): Promise<JWT> {
       // Initial sign in
       if (account && user && profile) {
-        const spotifyProfile = profile as SpotifyProfile
+        const spotifyProfile = profile as ExtendedSpotifyProfile
 
         token.accessToken = account.access_token
         token.refreshToken = account.refresh_token
@@ -220,25 +236,22 @@ export const authOptions: NextAuthOptions = {
       return { ...token, error: "NoRefreshTokenError" }
     },
 
-    async session({ session, token }: { session: any; token: JWT }): Promise<any> {
-      session.accessToken = token.accessToken
-      session.error = token.error // Propagate error to client for handling (e.g., force re-login)
+    async session({ session, token }: { session: Session; token: JWT }): Promise<Session> {
+      const extendedSession = session as ExtendedSession;
+      extendedSession.accessToken = token.accessToken as string;
+      extendedSession.error = token.error as string | undefined;
 
       // Ensure session.user exists
-      if (!session.user) session.user = {}
+      if (!extendedSession.user) extendedSession.user = {};
 
-      // `session.user.id` will be the Spotify User ID
-      session.user.id = token.spotifyUserId
+      // Set user properties, handling null values
+      extendedSession.user.id = token.spotifyUserId as string;
+      extendedSession.user.auratuneInternalId = token.auratuneInternalId as string;
+      extendedSession.user.name = token.name as string;
+      extendedSession.user.email = token.email as string;
+      extendedSession.user.image = token.picture as string;
 
-      // Add AuraTune internal UUID to the session user object
-      session.user.auratuneInternalId = token.auratuneInternalId
-
-      // Pass through standard user properties from token
-      if (token.name) session.user.name = token.name
-      if (token.email) session.user.email = token.email
-      if (token.picture) session.user.image = token.picture
-
-      return session
+      return extendedSession;
     },
   },
   pages: {

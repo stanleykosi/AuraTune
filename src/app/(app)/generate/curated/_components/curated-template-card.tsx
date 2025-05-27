@@ -37,6 +37,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { SelectCuratedTemplate } from "@/db/schema/curated-templates-schema"
+import type { LucideIcon } from "lucide-react"
 
 interface CuratedTemplateCardProps {
   template: SelectCuratedTemplate
@@ -72,9 +73,9 @@ const TemplateIcon: React.FC<{
       .split("-")
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join("")
-    const IconComponent = (LucideIcons as any)[
+    const IconComponent = (LucideIcons as unknown as Record<string, LucideIcon>)[
       pascalCaseIconName
-    ] as LucideIcons.LucideIcon | undefined
+    ]
 
     if (IconComponent) {
       return (

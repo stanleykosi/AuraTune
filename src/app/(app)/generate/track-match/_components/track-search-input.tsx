@@ -26,7 +26,6 @@
  * - `@/actions/spotify/spotify-playlist-actions`: Server action to search Spotify tracks.
  * - `spotify-web-api-node`: For Spotify track types.
  * - `sonner`: For toast notifications.
- * - `@/lib/hooks/use-spotify-web-playback`: For Spotify Web Playback SDK integration.
  *
  * @notes
  * - This is a client component (`"use client"`) due to its interactive nature and state management.
@@ -37,7 +36,6 @@
 import React, {
   useState,
   useEffect,
-  FormEvent,
   useRef,
   useCallback,
 } from "react"
@@ -48,10 +46,8 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { searchSpotifyTracksAction } from "@/actions/spotify/spotify-playlist-actions"
-import type SpotifyWebApi from "spotify-web-api-node"
 import { Search, Sparkles, XCircle, Loader2, Music2 } from "lucide-react"
 import { toast } from "sonner"
-import { useSpotifyWebPlayback } from "@/lib/hooks/use-spotify-web-playback"
 
 interface SelectedTrackInfo {
   id: string
@@ -70,7 +66,6 @@ export default function TrackSearchInput({
   isGenerating,
 }: TrackSearchInputProps): JSX.Element {
   const { data: session } = useSession()
-  const { isReady, state, play } = useSpotifyWebPlayback()
   const [searchQuery, setSearchQuery] = useState<string>("")
   const [suggestions, setSuggestions] = useState<SpotifyApi.TrackObjectFull[]>([])
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState<boolean>(false)
@@ -82,15 +77,15 @@ export default function TrackSearchInput({
   const suggestionsRef = useRef<HTMLDivElement>(null)
 
   // Debounce function
-  const debounce = <F extends (...args: any[]) => any>(
-    func: F,
+  const debounce = <T,>(
+    func: (query: string) => Promise<T>,
     delay: number
   ) => {
     let timeoutId: NodeJS.Timeout
-    return (...args: Parameters<F>): Promise<ReturnType<F>> => {
+    return (query: string): Promise<T> => {
       return new Promise((resolve) => {
         clearTimeout(timeoutId)
-        timeoutId = setTimeout(() => resolve(func(...args)), delay)
+        timeoutId = setTimeout(() => resolve(func(query)), delay)
       })
     }
   }
@@ -276,7 +271,7 @@ export default function TrackSearchInput({
                   suggestions.length === 0 &&
                   searchQuery.trim() && (
                     <div className="p-4 text-center text-sm text-muted-foreground">
-                      No tracks found for "{searchQuery}". Try a different
+                      No tracks found for &quot;{searchQuery}&quot;. Try a different
                       search.
                     </div>
                   )}

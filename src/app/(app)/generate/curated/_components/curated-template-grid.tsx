@@ -35,13 +35,13 @@
  */
 "use client"
 
-import React, { useState, useCallback } from "react"
+import React, { useState } from "react"
 import CuratedTemplateCard from "./curated-template-card"
 import { SelectCuratedTemplate } from "@/db/schema/curated-templates-schema"
 import { playlistGenerationMethodEnum } from "@/db/schema/playlists-schema"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Info, Loader2, AlertTriangle } from "lucide-react"
+import { Info, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 import {
   generateAndPreviewPlaylistFromTemplateAction,
@@ -50,7 +50,7 @@ import {
 } from "@/actions/generation/generation-actions"
 import { PlaylistPreviewData } from "@/types"
 import PlaylistPreviewModal from "@/components/shared/playlist-preview-modal"
-import LoadingSpinner from "@/components/shared/loading-spinner" // Import the new spinner
+import LoadingSpinner from "@/components/shared/loading-spinner"
 
 interface CuratedTemplateGridProps {
   templates: SelectCuratedTemplate[]

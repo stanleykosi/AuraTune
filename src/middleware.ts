@@ -25,19 +25,35 @@
 
 import { withAuth, NextRequestWithAuth } from "next-auth/middleware"
 import { NextResponse } from "next/server"
+import { getToken } from "next-auth/jwt"
+
+// Define protected routes
+const isProtectedRoute = (pathname: string): boolean => {
+  const protectedPaths = [
+    '/dashboard',
+    '/analytics',
+    '/generate',
+    '/settings',
+    '/playlists'
+  ]
+  return protectedPaths.some(path => pathname.startsWith(path))
+}
 
 export default withAuth(
   // The `middleware` function itself can be used for additional logic after authorization,
   // or for tasks like adding headers. For basic protection, it can simply return NextResponse.next().
   // `withAuth` augments the `Request` object with `req.nextauth.token`.
-  function middleware(_req: NextRequestWithAuth) {
-    // Example: Log the token or path for debugging (remove in production)
-    // console.log("Token in middleware:", req.nextauth.token);
-    // console.log("Accessing protected route:", req.nextUrl.pathname);
+  async function middleware(request: NextRequestWithAuth) {
+    const pathname = request.nextUrl.pathname
 
-    // If the `authorized` callback (below) returns true, this function is executed.
-    // We can perform additional checks here if necessary.
-    // For now, if authorized, allow the request to proceed.
+    // Check if the path is protected
+    if (isProtectedRoute(pathname)) {
+      const session = await getToken({ req: request })
+      if (!session) {
+        return NextResponse.redirect(new URL('/auth/signin', request.url))
+      }
+    }
+
     return NextResponse.next()
   },
   {
@@ -72,26 +88,10 @@ export default withAuth(
  */
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes, including /api/auth for NextAuth)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - The root path / (public landing page)
-     * - Any paths containing a '.' (likely static assets like .svg, .png)
-     * This pattern aims to protect all application routes (e.g., /dashboard, /generate)
-     * while leaving public assets and API routes accessible.
-     */
-    // Original matcher for specific top-level protected routes:
-    // "/dashboard/:path*",
-    // "/generate/:path*",
-    // "/analytics/:path*",
-    // "/settings/:path*",
-
-    // A more general matcher for all routes under `(app)` assuming they are not public assets:
-    // This regex aims to match routes like /dashboard, /generate/curated, etc.,
-    // but exclude /api, /_next/static, /_next/image, /favicon.ico, and the root path itself.
-    "/((?!api|_next/static|_next/image|favicon.ico|auratune-logo-placeholder.svg|^/$).*)",
+    '/dashboard/:path*',
+    '/analytics/:path*',
+    '/generate/:path*',
+    '/settings/:path*',
+    '/playlists/:path*'
   ],
 }

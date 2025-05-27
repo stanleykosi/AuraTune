@@ -44,7 +44,7 @@ import { playlistGenerationMethodEnum } from "@/db/schema/playlists-schema"
 import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { AlertTriangle, Info } from "lucide-react"
+import { AlertTriangle } from "lucide-react"
 
 // Constants for retry logic
 const MAX_RETRIES = 3
@@ -190,10 +190,10 @@ export default function GenerateByTrackMatchPage(): JSX.Element {
           duration: 5000,
           action: result.data.spotifyPlaylistUrl
             ? {
-                label: "Open Playlist",
-                onClick: () =>
-                  window.open(result.data.spotifyPlaylistUrl, "_blank"),
-              }
+              label: "Open Playlist",
+              onClick: () =>
+                window.open(result.data.spotifyPlaylistUrl, "_blank"),
+            }
             : undefined,
         })
         setIsPreviewModalOpen(false)

@@ -25,7 +25,6 @@
 
 import { ActionState, OpenRouterTrackSuggestion } from "@/types"
 import { callOpenRouter } from "@/lib/openrouter-client"
-import type SpotifyWebApi from "spotify-web-api-node"
 import { z } from "zod"
 
 /**
@@ -103,8 +102,8 @@ Ensure the track names and artist names are accurate.
         message: "LLM returned an empty response.",
       }
     }
-    
-    let parsedResponse: any
+
+    let parsedResponse: unknown
     try {
       const cleanedLlmResponseString = llmResponseString.replace(/^```json\s*|```$/g, '').trim();
       parsedResponse = JSON.parse(cleanedLlmResponseString)
@@ -138,7 +137,7 @@ Ensure the track names and artist names are accurate.
     }
     // Soft warning if LLM doesn't meet exact track count
     if (trackSuggestions.length !== trackCount) {
-       console.warn(
+      console.warn(
         `LLM generated ${trackSuggestions.length} tracks, but ${trackCount} were requested. Proceeding with available tracks.`
       );
     }
@@ -183,7 +182,7 @@ const PlaylistNameAndDescriptionSchema = z.object({
  *          On failure, `isSuccess` is false and `message` contains error details.
  */
 export async function generatePlaylistNameAndDescriptionViaOpenRouterAction(
-  systemPrompt: string, // Added systemPrompt parameter
+  systemPrompt: string,
   tracks: SpotifyApi.TrackObjectFull[],
   themeDescription: string
 ): Promise<ActionState<{ name: string; description: string }>> {
@@ -239,7 +238,7 @@ Remember to provide your response strictly in the specified JSON format as outli
       }
     }
 
-    let parsedResponse: any
+    let parsedResponse: unknown
     try {
       const cleanedLlmResponseString = llmResponseString.replace(/^```json\s*|```$/g, '').trim();
       parsedResponse = JSON.parse(cleanedLlmResponseString)

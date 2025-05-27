@@ -42,7 +42,8 @@ import {
   PlayerTrackInfo,
   initialPlayerState,
 } from "@/types/player-types"
-import type SpotifyWebApi from "spotify-web-api-node"
+
+type CurrentPlaybackResponse = SpotifyApi.CurrentPlaybackResponse
 
 // Constants for polling and progress updates
 const POLLING_INTERVAL = 1000 // Sync with Spotify every 1 second for more responsive updates
@@ -52,7 +53,7 @@ const DEVICE_CHECK_INTERVAL = 2000 // Check device state every 2 seconds
 
 // Action types for the player state reducer
 type PlayerReducerAction =
-  | { type: "SET_STATE_FROM_API"; payload: SpotifyApi.CurrentPlaybackResponse | null }
+  | { type: "SET_STATE_FROM_API"; payload: CurrentPlaybackResponse | null }
   | { type: "SET_IS_PLAYING_OPTIMISTIC"; payload: boolean }
   | { type: "SET_PROGRESS_LOCAL"; payload: number }
   | { type: "SET_VOLUME"; payload: number }
@@ -124,7 +125,7 @@ const playerReducer = (state: PlayerState, action: PlayerReducerAction): PlayerS
     case "SET_VOLUME":
       return { ...state, volumePercent: action.payload }
     case "SET_ERROR":
-      return { ...state, error: action.payload, isSyncing: false }
+      return { ...state, error: action.payload ?? null, isSyncing: false }
     case "SET_SYNCING":
       return { ...state, isSyncing: action.payload }
     case "RESET_TO_INITIAL":
@@ -140,7 +141,7 @@ const playerReducer = (state: PlayerState, action: PlayerReducerAction): PlayerS
  */
 export function useSpotifyPlayerSync() {
   const [state, dispatch] = useReducer(playerReducer, initialPlayerState)
-  const { data: session, status: sessionStatus } = useSession()
+  const { status: sessionStatus } = useSession()
 
   // Function to fetch current playback state from Spotify
   const syncPlaybackState = useCallback(
@@ -168,17 +169,18 @@ export function useSpotifyPlayerSync() {
               dispatch({ type: "SET_ERROR", payload: result.message })
             }
           } else {
-            dispatch({ type: "SET_ERROR", payload: result.message })
+            dispatch({ type: "SET_ERROR", payload: result.message ?? null })
             // Only reset state on non-device errors
             if (!result.message.includes("device")) {
               dispatch({ type: "SET_STATE_FROM_API", payload: null })
             }
           }
         }
-      } catch (error) {
+      } catch (err) {
         // Don't update device state on network errors
         if (!state.deviceId) {
-          dispatch({ type: "SET_ERROR", payload: "Failed to sync with Spotify" })
+          const errorMessage = err instanceof Error ? err.message : "Failed to sync with Spotify"
+          dispatch({ type: "SET_ERROR", payload: errorMessage })
         }
       } finally {
         if (isTriggeredByControl) {
@@ -226,11 +228,9 @@ export function useSpotifyPlayerSync() {
           dispatch({ type: "SET_PROGRESS_LOCAL", payload: newProgress })
         } else {
           // Progress exceeded duration, likely track ended. Polling will catch the new state.
-          // For now, stop local increment. Could also trigger an immediate sync.
+          // For now, stop local increment.
           dispatch({ type: "SET_PROGRESS_LOCAL", payload: state.track!.durationMs })
           clearInterval(progressInterval!)
-          // Consider an immediate sync if track ends locally before poll picks it up
-          // syncPlaybackState(true); 
         }
       }, PROGRESS_UPDATE_INTERVAL)
     }
@@ -241,8 +241,8 @@ export function useSpotifyPlayerSync() {
 
   // --- Playback Control Functions ---
 
-  const commonControlHandler = async (
-    action: () => Promise<any>,
+  const commonControlHandler = useCallback(async (
+    action: () => Promise<unknown>,
     optimisticUpdate?: () => void
   ) => {
     if (sessionStatus !== "authenticated") {
@@ -264,14 +264,14 @@ export function useSpotifyPlayerSync() {
           dispatch({ type: "SET_SYNCING", payload: true })
           if (optimisticUpdate) optimisticUpdate()
 
-          const result = await action()
+          const result = await action() as { isSuccess: boolean; message?: string }
           if (result.isSuccess) {
             if (result.message) toast.success(result.message, { duration: 2000 })
             await syncPlaybackState(true)
             setTimeout(() => syncPlaybackState(true), SYNC_AFTER_CONTROL_DELAY)
           } else {
             if (result.message) toast.error(result.message)
-            dispatch({ type: "SET_ERROR", payload: result.message })
+            dispatch({ type: "SET_ERROR", payload: result.message ?? null })
             await syncPlaybackState(true)
           }
         } else {
@@ -280,20 +280,21 @@ export function useSpotifyPlayerSync() {
           dispatch({ type: "SET_SYNCING", payload: true })
           if (optimisticUpdate) optimisticUpdate()
 
-          const result = await action()
+          const result = await action() as { isSuccess: boolean; message?: string }
           if (result.isSuccess) {
             if (result.message) toast.success(result.message, { duration: 2000 })
             await syncPlaybackState(true)
             setTimeout(() => syncPlaybackState(true), SYNC_AFTER_CONTROL_DELAY)
           } else {
             if (result.message) toast.error(result.message)
-            dispatch({ type: "SET_ERROR", payload: result.message })
+            dispatch({ type: "SET_ERROR", payload: result.message ?? null })
             await syncPlaybackState(true)
           }
         }
-      } catch (error) {
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "Control action failed"
         toast.error("Failed to execute playback control")
-        dispatch({ type: "SET_ERROR", payload: "Control action failed" })
+        dispatch({ type: "SET_ERROR", payload: errorMessage })
         await syncPlaybackState(true)
       }
       return
@@ -309,22 +310,23 @@ export function useSpotifyPlayerSync() {
     if (optimisticUpdate) optimisticUpdate()
 
     try {
-      const result = await action()
+      const result = await action() as { isSuccess: boolean; message?: string }
       if (result.isSuccess) {
         if (result.message) toast.success(result.message, { duration: 2000 })
         await syncPlaybackState(true)
         setTimeout(() => syncPlaybackState(true), SYNC_AFTER_CONTROL_DELAY)
       } else {
         if (result.message) toast.error(result.message)
-        dispatch({ type: "SET_ERROR", payload: result.message })
+        dispatch({ type: "SET_ERROR", payload: result.message ?? null })
         await syncPlaybackState(true)
       }
-    } catch (error) {
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Control action failed"
       toast.error("Failed to execute playback control")
-      dispatch({ type: "SET_ERROR", payload: "Control action failed" })
+      dispatch({ type: "SET_ERROR", payload: errorMessage })
       await syncPlaybackState(true)
     }
-  }
+  }, [sessionStatus, state.hasActiveDevice, syncPlaybackState, dispatch])
 
   const play = useCallback(() => {
     if (state.isPlaying) return // Already playing
