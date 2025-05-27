@@ -1,4 +1,3 @@
-
 /**
  * @description
  * Client component for displaying detailed analytics, specifically top artists and tracks
@@ -55,9 +54,14 @@ export default function AnalyticsDisplay({
 
   return (
     <Tabs defaultValue="short_term" className="w-full">
-      <TabsList className="grid w-full grid-cols-3 mb-6">
+      <TabsList className="bg-white flex flex-col gap-1 mb-6 w-full md:grid md:grid-cols-3 md:rounded-md md:bg-muted md:p-1">
         {timeRanges.map((range) => (
-          <TabsTrigger key={range} value={range} data-testid={`tab-${range}`}>
+          <TabsTrigger
+            key={range}
+            value={range}
+            data-testid={`tab-${range}`}
+            className="w-full bg-transparent text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground"
+          >
             {timeRangeMapping[range]}
           </TabsTrigger>
         ))}

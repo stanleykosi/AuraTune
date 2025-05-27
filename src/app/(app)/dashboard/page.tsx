@@ -28,9 +28,12 @@
 
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart, Music4, Sparkles as GenerateIcon } from "lucide-react"
 import AuthButton from "@/components/shared/auth-button"
+import Link from "next/link"
+import { Suspense } from "react" // Added Suspense import
+import DashboardSectionSkeleton from "./_components/DashboardSectionSkeleton" // Added import
 
 export default async function DashboardPage(): Promise<JSX.Element> {
   const session = await getServerSession(authOptions)
@@ -64,8 +67,51 @@ export default async function DashboardPage(): Promise<JSX.Element> {
       </header>
 
       {/* Placeholder Cards Section */}
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Card>
+      <Suspense fallback={<DashboardSectionSkeleton />}>
+        <DashboardCardsFetcher session={session} />
+      </Suspense>
+
+      {/* User Details - Kept for reference, can be removed or restyled */}
+      <section className="mt-12">
+        <h2 className="text-2xl font-semibold text-primary mb-4">Account Details</h2>
+        <Card className="bg-card shadow-lg">
+          <CardContent className="pt-6 text-sm">
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-start">
+                <span className="w-full sm:w-1/3 font-semibold text-muted-foreground sm:pr-2">Email:</span>
+                <span className="w-full sm:w-2/3 text-foreground break-all">{session.user.email || "Not available"}</span>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-start">
+                <span className="w-full sm:w-1/3 font-semibold text-muted-foreground sm:pr-2">Spotify User ID:</span>
+                <span className="w-full sm:w-2/3 text-foreground break-all">{session.user.id || "Not available"}</span>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-start">
+                <span className="w-full sm:w-1/3 font-semibold text-muted-foreground sm:pr-2">AuraTune Internal ID:</span>
+                <span className="w-full sm:w-2/3 text-foreground break-all">{session.user.auratuneInternalId || "Not available"}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <p className="mt-8 text-center text-sm text-muted-foreground">
+        More features and personalized content coming soon!
+      </p>
+    </div>
+  )
+}
+
+// New async component to fetch/render dashboard cards
+async function DashboardCardsFetcher({ session }: { session: any }): Promise<JSX.Element> {
+  // In a real scenario, if cards depended on async data, you'd fetch it here.
+  // For now, we're just rendering the existing card structure.
+  // Adding a slight delay to simulate network latency for skeleton visibility:
+  await new Promise(resolve => setTimeout(resolve, 50)); // Simulate loading
+
+  return (
+    <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
+      <Link href="/generate/curated" className="block h-full hover:shadow-lg transition-shadow duration-200 rounded-lg">
+        <Card className="h-full">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Quick Generate
@@ -79,23 +125,25 @@ export default async function DashboardPage(): Promise<JSX.Element> {
             </p>
           </CardContent>
         </Card>
+      </Link>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Your Top Tracks
-            </CardTitle>
-            <Music4 className="h-5 w-5 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">Coming Soon</div>
-            <p className="text-xs text-muted-foreground">
-              Rediscover your most played songs.
-            </p>
-          </CardContent>
-        </Card>
+      <Card className="h-full">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">
+            Personalized Mixes
+          </CardTitle>
+          <Music4 className="h-5 w-5 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">Coming Soon</div>
+          <p className="text-xs text-muted-foreground">
+            Tailored playlists based on your unique taste.
+          </p>
+        </CardContent>
+      </Card>
 
-        <Card>
+      <Link href="/analytics" className="block h-full hover:shadow-lg transition-shadow duration-200 rounded-lg">
+        <Card className="h-full">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Listening Stats
@@ -109,32 +157,7 @@ export default async function DashboardPage(): Promise<JSX.Element> {
             </p>
           </CardContent>
         </Card>
-      </section>
-
-      {/* User Details - Kept for reference, can be removed or restyled */}
-      <section className="mt-12">
-        <h2 className="text-2xl font-semibold text-card-foreground mb-4">Account Details</h2>
-        <Card className="bg-card">
-          <CardContent className="pt-6 space-y-3 text-sm">
-            <p>
-              <span className="font-medium text-muted-foreground">Email:</span>{" "}
-              {session.user.email || "Not available"}
-            </p>
-            <p>
-              <span className="font-medium text-muted-foreground">Spotify User ID:</span>{" "}
-              {session.user.id || "Not available"}
-            </p>
-            <p>
-              <span className="font-medium text-muted-foreground">AuraTune Internal ID:</span>{" "}
-              {session.user.auratuneInternalId || "Not available"}
-            </p>
-          </CardContent>
-        </Card>
-      </section>
-
-      <p className="mt-8 text-center text-sm text-muted-foreground">
-        More features and personalized content coming soon!
-      </p>
-    </div>
-  )
+      </Link>
+    </section>
+  );
 }
