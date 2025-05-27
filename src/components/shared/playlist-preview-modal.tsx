@@ -125,7 +125,7 @@ export default function PlaylistPreviewModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0">
+      <DialogContent className="w-[95vw] max-w-lg sm:max-w-2xl max-h-[90vh] flex flex-col p-0">
         <DialogHeader className="p-6 pb-0">
           <DialogTitle className="text-2xl flex items-center">
             <ListMusic className="mr-2 h-6 w-6 text-primary" />
@@ -206,14 +206,14 @@ export default function PlaylistPreviewModal({
           </div>
         </div>
 
-        <DialogFooter className="p-6 pt-0 border-t mt-auto">
+        <DialogFooter className="p-6 border-t mt-auto flex flex-col space-y-3 sm:flex-row sm:justify-between sm:items-center sm:space-y-0">
           <DialogClose asChild>
-            <Button variant="outline" onClick={onDiscard} disabled={isSaving}>
+            <Button variant="outline" onClick={onDiscard} disabled={isSaving} className="w-full sm:w-auto">
               <XCircle className="mr-2 h-4 w-4" />
               Discard
             </Button>
           </DialogClose>
-          <Button onClick={handleSave} disabled={isSaving || playlistData.tracks.length === 0}>
+          <Button onClick={handleSave} disabled={isSaving || playlistData.tracks.length === 0} className="w-full sm:w-auto">
             <Save className="mr-2 h-4 w-4" />
             {isSaving ? "Saving..." : "Save to Spotify"}
           </Button>

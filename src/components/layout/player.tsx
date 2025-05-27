@@ -124,8 +124,8 @@ export default function Player(): JSX.Element {
   return (
     <footer className="h-24 bg-card border-t border-border flex items-center justify-between px-2 sm:px-4 md:px-6 shrink-0 text-card-foreground">
       {/* Left Section: Track Info */}
-      <div className="flex items-center gap-3 w-full sm:w-1/3 min-w-[180px] sm:min-w-[200px] flex-shrink sm:flex-shrink-0">
-        <Avatar className="h-12 w-12 sm:h-14 sm:w-14 rounded-md">
+      <div className="flex items-center gap-3 overflow-hidden min-w-[80px] sm:min-w-[180px] md:min-w-[200px] sm:w-1/3 lg:w-1/4 sm:flex-shrink-0">
+        <Avatar className="h-12 w-12 flex-shrink-0 sm:h-14 sm:w-14 rounded-md">
           {state.currentTrack?.album.images[0]?.url ? (
             <AvatarImage src={state.currentTrack.album.images[0].url} alt={state.currentTrack.album.name} />
           ) : (
@@ -138,14 +138,14 @@ export default function Player(): JSX.Element {
           <p className="text-sm font-semibold truncate" title={state.currentTrack?.name || "No track playing"}>
             {state.currentTrack?.name || "No track playing"}
           </p>
-          <p className="text-xs text-muted-foreground truncate" title={state.currentTrack?.artists || "Unknown artist"}>
+          <p className="text-xs text-muted-foreground truncate sm:inline-block" title={state.currentTrack?.artists || "Unknown artist"}>
             {state.currentTrack?.artists || (isReady ? "Unknown artist" : "No active device")}
           </p>
         </div>
       </div>
 
       {/* Center Section: Playback Controls & Progress */}
-      <div className="flex flex-col items-center gap-1 sm:gap-2 w-auto sm:w-1/3 max-w-md">
+      <div className="flex flex-col items-center gap-1 sm:gap-2 flex-1 min-w-[130px]">
         <div className="flex items-center gap-0.5 sm:gap-1 md:gap-2">
           <Button
             variant="ghost"
@@ -201,14 +201,14 @@ export default function Player(): JSX.Element {
             onValueCommit={handleProgressCommit}
             disabled={isControlDisabled || !state.duration}
           />
-          <span className="text-xs text-muted-foreground w-9 sm:w-10 text-center">
+          <span className="text-xs text-muted-foreground w-9 sm:w-10 text-center sm:inline-block">
             {formatDuration(state.duration)}
           </span>
         </div>
       </div>
 
       {/* Right Section: Volume & Device Info */}
-      <div className="flex items-center justify-end gap-1 sm:gap-2 md:gap-3 w-auto sm:w-1/3 min-w-[100px] sm:min-w-[150px]">
+      <div className="flex items-center justify-end gap-1 flex-shrink-0 min-w-[36px] sm:gap-2 sm:w-[170px] lg:w-1/4">
         {localVolume === 0 ? (
           <VolumeX className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
         ) : (
@@ -218,7 +218,7 @@ export default function Player(): JSX.Element {
           value={[localVolume]}
           max={100}
           step={1}
-          className="w-16 sm:w-20 md:w-24"
+          className="hidden sm:inline-flex w-28"
           aria-label="Volume Control"
           onValueChange={handleVolumeChange}
           onValueCommit={handleVolumeCommit}

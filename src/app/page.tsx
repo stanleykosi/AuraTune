@@ -26,39 +26,43 @@ import AuthButton from "@/components/shared/auth-button" // Import the AuthButto
  */
 export default async function HomePage(): Promise<JSX.Element> {
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-8 font-[family-name:var(--font-geist-sans)]">
-      <header className="mb-12 text-center">
-        <div className="relative w-[200px] h-[100px] mx-auto mb-4">
-          <Image
-            src="/auratune-logo-placeholder.svg"
-            alt="AuraTune Logo"
-            fill
-            priority
-            className="dark:invert object-contain"
-          />
-        </div>
-        <h1 className="text-4xl font-bold text-primary">Welcome to AuraTune</h1>
-        <p className="text-lg text-muted-foreground mt-2">
-          Discover music like never before with AI-powered playlists.
-        </p>
-      </header>
-
-      <main className="flex flex-col gap-8 items-center">
-        <div className="p-6 border rounded-lg shadow-md bg-card">
-          <h2 className="text-2xl font-semibold mb-4 text-card-foreground">
-            Authentication Status
-          </h2>
-          <AuthButton />
-        </div>
-
-        <div className="mt-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            Connect your Spotify account to get started.
+    <div className="flex flex-col min-h-screen font-[family-name:var(--font-geist-sans)]">
+      {/* Content wrapper that grows and centers its content */}
+      <div className="flex flex-col items-center justify-center flex-grow p-4 sm:p-8">
+        <header className="mb-12 text-center">
+          <div className="relative w-[150px] h-[75px] sm:w-[200px] sm:h-[100px] mx-auto mb-4">
+            <Image
+              src="/auratune-logo-placeholder.svg"
+              alt="AuraTune Logo"
+              fill
+              priority
+              className="dark:invert object-contain"
+            />
+          </div>
+          <h1 className="text-4xl sm:text-5xl font-bold text-primary">Welcome to AuraTune</h1>
+          <p className="text-lg text-muted-foreground mt-2">
+            Discover music like never before with AI-powered playlists.
           </p>
-        </div>
-      </main>
+        </header>
 
-      <footer className="absolute bottom-8 text-center w-full">
+        <main className="flex flex-col gap-8 items-center">
+          <div className="p-4 sm:p-6 border rounded-lg shadow-md bg-card">
+            <h2 className="text-2xl font-semibold mb-4 text-card-foreground">
+              Authentication Status
+            </h2>
+            <AuthButton />
+          </div>
+
+          <div className="mt-8 text-center">
+            <p className="text-sm text-muted-foreground">
+              Connect your Spotify account to get started.
+            </p>
+          </div>
+        </main>
+      </div> {/* End of content wrapper */}
+
+      {/* Footer is now part of the flex flow */}
+      <footer className="text-center w-full py-8">
         <p className="text-xs text-muted-foreground">
           © {new Date().getFullYear()} AuraTune. All rights reserved.
         </p>
