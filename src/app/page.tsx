@@ -40,13 +40,13 @@ export default async function HomePage(): Promise<JSX.Element> {
       {/* Content wrapper that grows and centers its content */}
       <div className="flex flex-col items-center justify-center flex-grow p-4 sm:p-8">
         <header className="mb-12 text-center">
-          <div className="relative w-[150px] h-[75px] sm:w-[200px] sm:h-[100px] mx-auto mb-4">
+          <div className="relative w-[200px] h-[200px] mx-auto mb-4 rounded-lg overflow-hidden shadow-lg">
             <Image
-              src="/auratune-logo-placeholder.svg"
-              alt="AuraTune Logo"
+              src="/placeholder-album-art.png"
+              alt="AuraTune Album Art"
               fill
               priority
-              className="object-contain"
+              className="object-cover"
             />
           </div>
           <h1 className="text-4xl sm:text-5xl font-bold text-primary">Welcome to AuraTune</h1>
@@ -56,10 +56,6 @@ export default async function HomePage(): Promise<JSX.Element> {
         </header>
 
         <main className="flex flex-col items-center justify-center text-center px-4">
-          <p className="text-xl sm:text-2xl text-foreground mb-8 max-w-lg leading-relaxed">
-            Dive into a seamless music experience. <br />
-            Connect with Spotify to unlock personalized AI-powered playlists.
-          </p>
           <div className="transform transition-transform duration-300 hover:scale-105">
             <AuthButton />
           </div>
