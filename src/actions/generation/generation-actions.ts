@@ -25,6 +25,7 @@
  * - `@/actions/spotify/spotify-playlist-actions`: To validate tracks against Spotify and manage Spotify playlists.
  * - `@/actions/spotify/spotify-track-actions`: To fetch details of a specific Spotify track.
  * - `@/db/schema/playlists-schema`: For `playlistGenerationMethodEnum` type.
+ * - `@/actions/db/system-prompts-actions`: To fetch system prompts by name.
  *
  * @notes
  * - These are high-level orchestrating actions.
@@ -50,27 +51,10 @@ import {
 } from "@/actions/spotify/spotify-playlist-actions"
 import { getSpotifyTrackDetailsAction } from "@/actions/spotify/spotify-track-actions"
 import { playlistGenerationMethodEnum } from "@/db/schema/playlists-schema"
-import fs from "fs/promises" // For reading prompt files
-import path from "path" // For constructing file paths
+import { getSystemPromptByNameAction } from "@/actions/db/system-prompts-actions"
 
 const MINIMUM_VALID_TRACKS = 5 // Minimum number of valid tracks required after validation
 const SPOTIFY_TRACK_ADD_LIMIT = 100 // Spotify API limit for adding tracks in one request
-
-/**
- * Reads a prompt file from the `src/prompts` directory.
- * @param fileName - The name of the prompt file (e.g., "track-match-base.md").
- * @returns The content of the file as a string.
- * @throws If the file cannot be read.
- */
-async function readPromptFile(fileName: string): Promise<string> {
-  try {
-    const filePath = path.join(process.cwd(), "src", "prompts", fileName)
-    return await fs.readFile(filePath, "utf-8")
-  } catch (error) {
-    console.error(`Error reading prompt file ${fileName}:`, error)
-    throw new Error(`Could not load system prompt: ${fileName}`)
-  }
-}
 
 /**
  * Orchestrates the generation of a playlist preview based on a selected curated template.
@@ -189,7 +173,15 @@ The suggestions should be suitable for a music playlist.`
       0
     )
 
-    const systemPromptForNaming = await readPromptFile("playlist-naming-base.md")
+    const systemPromptResult = await getSystemPromptByNameAction("playlist-naming")
+    if (!systemPromptResult.isSuccess || !systemPromptResult.data) {
+      return {
+        isSuccess: false,
+        message: systemPromptResult.message || "Failed to retrieve playlist naming prompt.",
+      }
+    }
+    const systemPromptForNaming = systemPromptResult.data.content
+
     const playlistMetadataResult =
       await generatePlaylistNameAndDescriptionViaOpenRouterAction(
         systemPromptForNaming,
@@ -284,7 +276,14 @@ export async function generateAndPreviewPlaylistFromTrackMatchAction(
     const trackCount = settingsResult.data.default_playlist_track_count
 
     // 4. Load the system prompt for track matching
-    const systemPromptForTrackGeneration = await readPromptFile("track-match-base.md")
+    const systemPromptResult = await getSystemPromptByNameAction("track-match")
+    if (!systemPromptResult.isSuccess || !systemPromptResult.data) {
+      return {
+        isSuccess: false,
+        message: systemPromptResult.message || "Failed to retrieve track match prompt.",
+      }
+    }
+    const systemPromptForTrackGeneration = systemPromptResult.data.content
 
     // 5. Construct user instruction for LLM track generation based on seed track
     const seedTrackArtists = seedTrack.artists.map(artist => artist.name).join(", ")
@@ -344,7 +343,14 @@ Focus on musical similarity to this seed song.`
     )
 
     // 10. Call LLM to generate playlist name and description
-    const systemPromptForNaming = await readPromptFile("playlist-naming-base.md")
+    const namingPromptResult = await getSystemPromptByNameAction("playlist-naming")
+    if (!namingPromptResult.isSuccess || !namingPromptResult.data) {
+      return {
+        isSuccess: false,
+        message: namingPromptResult.message || "Failed to retrieve playlist naming prompt.",
+      }
+    }
+    const systemPromptForNaming = namingPromptResult.data.content
     const themeDescriptionForNaming = `A playlist of tracks similar to '${seedTrack.name}' by ${seedTrackArtists}. Focus on capturing the essence of the seed song while creating an engaging listening experience.`
     const playlistMetadataResult =
       await generatePlaylistNameAndDescriptionViaOpenRouterAction(

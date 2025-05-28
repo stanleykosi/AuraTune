@@ -23,3 +23,4 @@ export * from "./users-schema"
 export * from "./user-settings-schema"
 export * from "./playlists-schema"
 export * from "./curated-templates-schema" // Added export for curated templates schema
+export * from "./system-prompts-schema" // Added export for system prompts schema
