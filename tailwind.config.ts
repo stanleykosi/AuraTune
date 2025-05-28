@@ -6,7 +6,6 @@
  *
  * Key features:
  * - Content sources pointing to all relevant files within the `src` directory.
- * - Dark mode enabled using the 'media' strategy (respects OS preference).
  * - Extended theme with project-specific color palette and font families.
  * - Includes the `tailwindcss-animate` plugin for Shadcn UI animations.
  */
@@ -14,13 +13,12 @@
 import type { Config } from 'tailwindcss'
 
 const config = {
-  darkMode: 'media', // Uses OS preference for dark mode
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}', // If using pages router
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}', // For app router
   ],
-  prefix: '', // No prefix for utility classes
+  prefix: '',
   theme: {
     container: {
       center: true,
@@ -41,8 +39,8 @@ const config = {
           foreground: 'hsl(var(--primary-foreground))', // White for text on primary
         },
         secondary: {
-          DEFAULT: 'hsl(var(--secondary))', // e.g., Light Gray #F7F7F7 or Dark Gray #1E1E1E
-          foreground: 'hsl(var(--secondary-foreground))', // Dark text on light gray, Light text on dark gray
+          DEFAULT: 'hsl(var(--secondary))', // Light Gray #F7F7F7
+          foreground: 'hsl(var(--secondary-foreground))', // Dark text on light gray
         },
         destructive: {
           DEFAULT: 'hsl(var(--destructive))', // e.g., Red
@@ -69,10 +67,7 @@ const config = {
         'auratune-accent': 'hsl(var(--color-accent-default))',   // Coral #FF5A5F
         'auratune-neutral-light-1': 'hsl(var(--color-neutral-light-1))', // #FFFFFF
         'auratune-neutral-light-2': 'hsl(var(--color-neutral-light-2))', // #F7F7F7
-        'auratune-neutral-dark-1': 'hsl(var(--color-neutral-dark-1))',   // #121212
-        'auratune-neutral-dark-2': 'hsl(var(--color-neutral-dark-2))',   // #1E1E1E
         'auratune-text-light': 'hsl(var(--color-text-light-primary))',   // #484848
-        'auratune-text-dark': 'hsl(var(--color-text-dark-primary))',     // #E0E0E0
         'spotify-green': 'hsl(var(--color-spotify-green))', // #1DB954
       },
       fontFamily: {

@@ -46,7 +46,7 @@ export default async function HomePage(): Promise<JSX.Element> {
               alt="AuraTune Logo"
               fill
               priority
-              className="dark:invert object-contain"
+              className="object-contain"
             />
           </div>
           <h1 className="text-4xl sm:text-5xl font-bold text-primary">Welcome to AuraTune</h1>
