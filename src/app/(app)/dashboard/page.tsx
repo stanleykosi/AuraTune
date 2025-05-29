@@ -73,27 +73,32 @@ export default async function DashboardPage(): Promise<JSX.Element> {
     const userName = session.user?.name || "AuraTune User";
 
     return (
-      <div className="space-y-8 p-4 sm:p-6 lg:p-8 font-[family-name:var(--font-geist-sans)]">
-        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <h1 className="text-3xl md:text-4xl font-bold text-primary">Welcome Back, {userName}!</h1>
-            <p className="text-lg text-muted-foreground">
+      <div className="space-y-6 sm:space-y-8">
+        {/* Header Section */}
+        <header className="flex flex-col sm:flex-row items-start justify-between gap-4">
+          <div className="space-y-2 min-w-0 flex-1">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-primary break-words">
+              Welcome Back, {userName}!
+            </h1>
+            <p className="text-base sm:text-lg text-muted-foreground">
               Here&apos;s what&apos;s new with your AuraTune experience.
             </p>
           </div>
-          <div className="shrink-0">
+          <div className="flex-shrink-0">
             <AuthButton />
           </div>
         </header>
 
-        {/* Placeholder Cards Section */}
-        <Suspense fallback={<DashboardSectionSkeleton />}>
-          <DashboardCardsFetcher />
-        </Suspense>
+        {/* Cards Section */}
+        <section className="space-y-6">
+          <Suspense fallback={<DashboardSectionSkeleton />}>
+            <DashboardCardsFetcher />
+          </Suspense>
+        </section>
 
-        {/* User Details - Kept for reference, can be removed or restyled */}
-        <section className="mt-12">
-          <h2 className="text-2xl font-semibold text-primary mb-4">Account Details</h2>
+        {/* Account Details Section */}
+        <section className="space-y-4">
+          <h2 className="text-2xl font-semibold text-primary">Account Details</h2>
           <Card className="bg-card shadow-lg">
             <CardContent className="pt-6 text-sm">
               <div className="space-y-4">
@@ -114,7 +119,7 @@ export default async function DashboardPage(): Promise<JSX.Element> {
           </Card>
         </section>
 
-        <p className="mt-8 text-center text-sm text-muted-foreground">
+        <p className="text-center text-sm text-muted-foreground">
           More features and personalized content coming soon!
         </p>
       </div>
@@ -137,14 +142,11 @@ export default async function DashboardPage(): Promise<JSX.Element> {
 
 // New async component to fetch/render dashboard cards
 async function DashboardCardsFetcher(): Promise<JSX.Element> {
-  // In a real scenario, if cards depended on async data, you'd fetch it here.
-  // For now, we're just rendering the existing card structure.
-  // Adding a slight delay to simulate network latency for skeleton visibility:
-  await new Promise(resolve => setTimeout(resolve, 50)); // Simulate loading
+  await new Promise(resolve => setTimeout(resolve, 50));
 
   return (
-    <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
-      <Link href="/generate/curated" className="block h-full hover:shadow-lg transition-shadow duration-200 rounded-lg">
+    <section className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <Link href="/generate/curated" className="block w-full hover:shadow-lg transition-shadow duration-200 rounded-lg">
         <Card className="h-full">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -176,7 +178,7 @@ async function DashboardCardsFetcher(): Promise<JSX.Element> {
         </CardContent>
       </Card>
 
-      <Link href="/analytics" className="block h-full hover:shadow-lg transition-shadow duration-200 rounded-lg">
+      <Link href="/analytics" className="block w-full hover:shadow-lg transition-shadow duration-200 rounded-lg">
         <Card className="h-full">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">

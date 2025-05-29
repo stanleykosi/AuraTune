@@ -66,10 +66,18 @@ function formatDuration(ms: number | null | undefined): string {
  * Renders the application's music player bar with dynamic UI and functionality.
  * @returns {JSX.Element} The JSX for the player bar.
  */
-export default function Player(): JSX.Element {
+export default function Player(): React.ReactElement {
+  // State hooks first
+  const [mounted, setMounted] = useState(false)
+  const [localVolume, setLocalVolume] = useState(0.5)
+  const [isSeeking, setIsSeeking] = useState(false)
+  const [localProgress, setLocalProgress] = useState(0)
+
+  // Custom hooks
   const {
     isReady,
     state,
+    isMobile,
     togglePlay,
     seek,
     setVolume,
@@ -77,9 +85,10 @@ export default function Player(): JSX.Element {
     previousTrack,
   } = useSpotifyWebPlayback()
 
-  const [localVolume, setLocalVolume] = useState(state.volume)
-  const [isSeeking, setIsSeeking] = useState(false)
-  const [localProgress, setLocalProgress] = useState(state.position)
+  // Effects
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     setLocalVolume(state.volume)
@@ -90,6 +99,11 @@ export default function Player(): JSX.Element {
       setLocalProgress(state.position)
     }
   }, [state.position, isSeeking])
+
+  // Don't render anything until mounted to avoid hydration mismatch
+  if (!mounted) {
+    return <div className="hidden" />
+  }
 
   const handleVolumeChange = (value: number[]) => {
     setLocalVolume(value[0])
@@ -117,6 +131,33 @@ export default function Player(): JSX.Element {
 
   const isLoading = !isReady
   const isControlDisabled = isLoading
+
+  // If on mobile, show alternative UI
+  if (isMobile) {
+    return (
+      <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border p-4 flex flex-col items-center justify-center space-y-2">
+        <p className="text-sm text-muted-foreground text-center">
+          Spotify Web Playback is not supported on mobile browsers.
+        </p>
+        <a
+          href="spotify://"
+          className="text-sm text-primary hover:underline"
+          onClick={(e) => {
+            e.preventDefault()
+            // Try to open Spotify app
+            window.location.href = 'spotify://'
+            
+            // Open web player in new tab as fallback
+            setTimeout(() => {
+              window.open('https://open.spotify.com', '_blank')
+            }, 1000)
+          }}
+        >
+          Open in Spotify App
+        </a>
+      </div>
+    )
+  }
 
   return (
     <footer className="h-24 bg-card border-t border-border flex items-center justify-between px-2 sm:px-4 md:px-6 shrink-0 text-card-foreground">

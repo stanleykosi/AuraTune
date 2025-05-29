@@ -57,16 +57,18 @@ export default function PageTransitionWrapper({
 
   return (
     <AnimatePresence mode="wait">
-      <motion.main
-        key={pathname} // Keyed by pathname to trigger animations on route change
+      <motion.div
+        key={pathname}
         initial="initial"
         animate="in"
         exit="out"
         variants={pageVariants}
-        className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 min-w-0" // Keep original layout classes
+        className="h-full overflow-y-auto overflow-x-hidden"
       >
-        {children}
-      </motion.main>
+        <div className="min-h-full p-4 sm:p-6 lg:p-8 pb-20">
+          {children}
+        </div>
+      </motion.div>
     </AnimatePresence>
   )
 }

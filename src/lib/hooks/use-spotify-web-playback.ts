@@ -39,6 +39,7 @@ type SpotifyPlayerState = Spotify.PlaybackState | { device_id: string } | { mess
 export function useSpotifyWebPlayback() {
   const [player, setPlayer] = useState<Spotify.Player | null>(null)
   const [isReady, setIsReady] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const [state, setState] = useState<WebPlaybackState>({
     isPlaying: false,
     currentTrack: null,
@@ -50,6 +51,22 @@ export function useSpotifyWebPlayback() {
   })
 
   const { data: session } = useSession()
+
+  useEffect(() => {
+    const checkMobile = () => {
+      const isMobileBrowser = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      )
+      setIsMobile(isMobileBrowser)
+
+      if (isMobileBrowser) {
+        toast.error("Spotify Web Playback is not supported on mobile browsers. Please use the Spotify app instead.",
+          { duration: 5000 })
+      }
+    }
+
+    checkMobile()
+  }, [])
 
   const handleReady = useCallback((state: SpotifyPlayerState) => {
     if ('device_id' in state) {
@@ -107,7 +124,7 @@ export function useSpotifyWebPlayback() {
   }, [])
 
   useEffect(() => {
-    if (!session?.accessToken) return
+    if (isMobile || !session?.accessToken) return
 
     const script = document.createElement("script")
     script.src = "https://sdk.scdn.co/spotify-player.js"
@@ -142,7 +159,7 @@ export function useSpotifyWebPlayback() {
         script.parentNode.removeChild(script)
       }
     }
-  }, [session?.accessToken, handleReady, handleNotReady, handlePlayerStateChanged, handlePlaybackError])
+  }, [session?.accessToken, isMobile, handleReady, handleNotReady, handlePlayerStateChanged, handlePlaybackError])
 
   // Add progress update effect
   useEffect(() => {
@@ -367,6 +384,7 @@ export function useSpotifyWebPlayback() {
   return {
     isReady,
     state,
+    isMobile,
     play,
     pause,
     togglePlay,

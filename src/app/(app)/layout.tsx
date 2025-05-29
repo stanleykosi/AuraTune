@@ -42,13 +42,23 @@ export default async function AppLayout({
   children,
 }: AppLayoutProps): Promise<JSX.Element> {
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground font-[family-name:var(--font-geist-sans)]">
+    <div className="fixed inset-0 flex flex-col bg-background text-foreground font-[family-name:var(--font-geist-sans)]">
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
-        <PageTransitionWrapper>{children}</PageTransitionWrapper>
+        {/* Sidebar */}
+        <aside className="w-16 md:w-64 flex-shrink-0 fixed top-0 bottom-24 left-0 z-30 bg-background border-r border-border">
+          <Sidebar />
+        </aside>
+
+        {/* Main content area */}
+        <main className="flex-1 w-full h-[calc(100vh-6rem)] pl-16 md:pl-64">
+          <PageTransitionWrapper>{children}</PageTransitionWrapper>
+        </main>
       </div>
 
-      <Player />
+      {/* Player fixed at bottom */}
+      <div className="fixed bottom-0 left-0 right-0 z-40">
+        <Player />
+      </div>
     </div>
   )
 }

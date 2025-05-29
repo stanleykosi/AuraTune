@@ -39,8 +39,8 @@ import Image from "next/image"
  */
 export default function Sidebar(): JSX.Element {
   return (
-    <div className="flex h-full flex-col gap-2">
-      <div className="flex h-[52px] items-center justify-center">
+    <div className="h-full flex flex-col gap-2 overflow-hidden">
+      <div className="flex h-[52px] items-center justify-center flex-shrink-0">
         <div className="flex items-center w-full gap-2 md:justify-start justify-center md:pl-3">
           <Image
             src="/placeholder-album-art.png"
@@ -53,7 +53,7 @@ export default function Sidebar(): JSX.Element {
           <span className="text-lg font-semibold hidden md:inline">AuraTune</span>
         </div>
       </div>
-      <ScrollArea className="flex-1 px-2">
+      <ScrollArea className="flex-1 px-2 overflow-y-auto">
         <SidebarNav />
       </ScrollArea>
     </div>
